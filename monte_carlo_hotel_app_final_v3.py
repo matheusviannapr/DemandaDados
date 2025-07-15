@@ -872,9 +872,9 @@ if entrada_dados == "📁 Upload de arquivo Excel":
     if uploaded_file is not None:
         try:
             # Carrega os cômodos do arquivo Excel
-            if \'comodos\' not in st.session_state or st.session_state.get(\'data_source\') != \'excel\':
+            if 'comodos' not in st.session_state or st.session_state.get('data_source') != 'excel':
                 st.session_state.comodos = cria_comodos_do_excel(uploaded_file)
-                st.session_state.data_source = \'excel\'
+                st.session_state.data_source = 'excel'
             
             # Mostra informações sobre os cômodos carregados
             st.success(f"✅ {len(st.session_state.comodos)} cômodos carregados:")
