@@ -558,7 +558,7 @@ def simula_carga_total(comodos: List[Comodo],
 def salvar_grafico(fig, nome_arquivo):
     """Salva um gráfico matplotlib como imagem PNG"""
     caminho = f"/tmp/{nome_arquivo}.png"
-    fig.savefig(caminho, dpi=300, bbox_inches=\'tight\', facecolor=\'white\')
+    fig.savefig(caminho, dpi=300, bbox_inches='tight', facecolor='white')
     return caminho
 
 # Função para gerar PDF com os resultados (versão aprimorada com FPDF2)
