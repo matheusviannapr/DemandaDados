@@ -7,4 +7,8 @@ weasyprint>=60.0
 jinja2>=3.1.0
 Pillow>=10.0.0
 packaging>=23.0
+libpango-1.0-0
+libcairo2
+libgdk-pixbuf2.0-0
+libffi-dev
 
