@@ -851,7 +851,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.multi_cell(190, 6, f"Análise baseada em {num_simulacoes:,} simulações independentes | Metodologia validada conforme práticas da engenharia elétrica", align="C")
     pdf.multi_cell(190, 6, "Para questões técnicas ou esclarecimentos adicionais, consulte a documentação técnica do sistema", align="C")
 
-    return pdf.output(dest='S').encode('latin1')
+    return pdf.output(dest='S').encode('utf-8')
 
 # --- Interface do Streamlit ---
 
