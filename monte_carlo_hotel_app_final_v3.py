@@ -233,12 +233,11 @@ try:
         st.image(logo, width=600)
     
     st.markdown("""
-        </div>
+        
         <div class="title-overlay">
             <h1>Demandas e Dados - Simulação para Análise de Carga Elétrica </h1>
-            
         </div>
-    </div>
+        
     """, unsafe_allow_html=True)
     
 except:
