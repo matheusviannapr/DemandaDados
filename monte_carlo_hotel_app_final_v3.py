@@ -889,7 +889,7 @@ else:  # Entrada direta de dados
     st.subheader("✏️ Entrada direta de dados")
     
     # Inicializa o estado se necessário
-    if \'comodos_data\' not in st.session_state:
+    if 'comodos_data' not in st.session_state:
         st.session_state.comodos_data = {}
     
     # Número de tipos de cômodos
