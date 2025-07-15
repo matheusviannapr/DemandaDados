@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 # Configuração da página
 st.set_page_config(
-    page_title="Simulação Monte Carlo - Hotel",
+    page_title="Demandas e Dados",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -219,7 +219,7 @@ with st.sidebar:
 
 # Cabeçalho com logo em faixa horizontal
 try:
-    logo = Image.open("/home/ubuntu/logo_demanda_dados.png")
+    logo = Image.open("logo_demanda_dados.png")
     
     st.markdown("""
     <div class="logo-banner">
@@ -235,7 +235,7 @@ try:
     st.markdown("""
         </div>
         <div class="title-overlay">
-            <h1>Simulação Monte Carlo para Análise de Carga Elétrica em Hotel</h1>
+            <h1>Demandas e Dados - Simulação Monte Carlo para Análise de Carga Elétrica </h1>
             <p>Sistema avançado de simulação para dimensionamento de infraestrutura elétrica</p>
         </div>
     </div>
