@@ -577,7 +577,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     # Ajustando a largura da célula para o título secundário
     pdf.multi_cell(0, 8, "Análise de Carga Elétrica para Dimensionamento de Infraestrutura Hoteleira", align="C")
     pdf.ln(5)
-    pdf.multi_cell(0, 6, f"Data de geração: {datetime.now().strftime(\"%d/%m/%Y às %H:%M\")}", align="C")
+    pdf.multi_cell(0, 6, f"Data de geração: {datetime.now().strftime("%d/%m/%Y às %H:%M")}", align="C")
     pdf.multi_cell(0, 6, "Sistema: Simulação Monte Carlo com Instâncias Individualizadas", align="C")
     pdf.ln(10)
 
