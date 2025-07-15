@@ -1273,5 +1273,116 @@ if "comodos" in st.session_state and st.session_state.comodos:
             
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.plot(frac_tempo * 100, todas_cargas_sorted, label="Curva de Duração", linewidth=2, color="#9b59b6")
-            ax.set_title(\
+            ax.set_title("Curva de Duração de Carga (Hotel)")
+            ax.set_xlabel("Fração do Tempo (%)")
+            ax.set_ylabel("Carga (W)")
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            st.pyplot(fig)
+        
+        with tab3:
+            st.subheader("Perfil de Carga Médio ao Longo do Dia")
+            st.write("Este gráfico exibe o comportamento típico da demanda elétrica durante um ciclo diário, revelando padrões de consumo e horários de pico. É fundamental para o planejamento operacional e estratégias de gestão energética.")
+            
+            media_por_minuto = np.mean(perfis, axis=0)
+            horas = np.arange(tempo_total) / 60.0
+            
+            fig, ax = plt.subplots(figsize=(12, 6))
+            ax.plot(horas, media_por_minuto, linewidth=2, label="Carga Média", color='#2c3e50')
+            ax.fill_between(horas, media_por_minuto, alpha=0.3, color='#3498db')
+            ax.set_xlabel("Hora do Dia")
+            ax.set_ylabel("Carga (W)")
+            ax.set_title("Perfil de Carga Médio Durante o Dia")
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            st.pyplot(fig)
+            
+            # Fator de Carga por Hora
+            st.subheader("Fator de Carga por Hora do Dia")
+            st.write("O fator de carga indica a eficiência da utilização da capacidade elétrica em cada hora. Valores mais altos sugerem uso mais consistente da infraestrutura.")
+            
+            pico_por_minuto = np.max(perfis, axis=0)
+            fator_carga_por_hora = []
+            for h in range(24):
+                inicio = h * 60
+                fim = inicio + 60
+                carga_media_h = np.mean(media_por_minuto[inicio:fim])
+                pico_h = np.max(pico_por_minuto[inicio:fim])
+                fator = carga_media_h / pico_h if pico_h > 0 else 0
+                fator_carga_por_hora.append(fator)
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.bar(np.arange(24), fator_carga_por_hora, color='#f39c12', alpha=0.8)
+            ax.set_xlabel("Hora do Dia")
+            ax.set_ylabel("Fator de Carga")
+            ax.set_title("Fator de Carga por Hora do Dia")
+            ax.set_xticks(np.arange(24))
+            ax.grid(True, axis='y', linestyle='--', alpha=0.7)
+            st.pyplot(fig)
+        
+        with tab4:
+            st.subheader("Gráfico de Potência Cumulativa por Cômodo")
+            st.write("Este gráfico de área empilhada mostra a contribuição de cada tipo de cômodo para a demanda total, permitindo identificar os maiores consumidores e orientar estratégias de eficiência energética.")
+            
+            # Calcula a carga média de cada cômodo individualmente
+            comodos_cargas_medias = {}
+            for comodo_obj in st.session_state.comodos:
+                comodo_copia = copy.deepcopy(comodo_obj)
+                instancias_para_comodo = {comodo_copia.nome: instancias_por_comodo.get(comodo_copia.nome, 1)}
+                _, perfis_comodo, _ = simula_carga_total(
+                    [comodo_copia],
+                    instancias_para_comodo,
+                    num_simulacoes=num_simulacoes,
+                    tempo_total=tempo_total
+                )
+                comodos_cargas_medias[comodo_obj.nome] = np.mean(perfis_comodo, axis=0)
+
+            if comodos_cargas_medias:
+                horas = np.arange(tempo_total) / 60.0
+                
+                fig, ax = plt.subplots(figsize=(14, 8))
+                comodos_nomes = list(comodos_cargas_medias.keys())
+                comodos_valores = [comodos_cargas_medias[nome] for nome in comodos_nomes]
+                
+                ax.stackplot(horas, *comodos_valores, labels=comodos_nomes, alpha=0.8)
+                ax.set_xlabel("Hora do Dia")
+                ax.set_ylabel("Potência (W)")
+                ax.set_title("Potência Cumulativa por Cômodo ao Longo do Dia")
+                ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+                ax.grid(True, alpha=0.3)
+                plt.tight_layout()
+                st.pyplot(fig)
+            else:
+                st.warning("Não foi possível gerar o gráfico de potência cumulativa por cômodo. Verifique a configuração dos cômodos.")
+
+else:
+    if entrada_dados == "📁 Upload de arquivo Excel":
+        st.info("👆 Por favor, carregue um arquivo Excel acima para começar a simulação.")
+        
+        # Exemplo de formato esperado
+        st.subheader("📋 Formato Esperado do Arquivo Excel")
+        
+        exemplo_df = pd.DataFrame({
+            'Equipamento': ['Ar Condicionado', 'Iluminação', 'TV'],
+            'Potência': [2000, 100, 150],
+            'Quantidade': [1, 4, 1],
+            'Tipo de intervalo': ['dinâmico', 'fixo', 'fixo'],
+            'intervalo': ['Início entre 14:00-18:00, duração 6', '18:00 as 23:00', '19:00 as 23:00'],
+            'probabilidade': [0.8, 1.0, 0.9],
+            'FD': [0.8, 1.0, 1.0]
+        })
+        
+        st.dataframe(exemplo_df)
+        
+        st.markdown("""
+        **Instruções:**
+        - Cada aba do Excel deve representar um tipo de cômodo (ex: "Quarto 1", "Quarto 3", etc.)
+        - As colunas obrigatórias são: Equipamento, Potência, Quantidade, Tipo de intervalo, intervalo, probabilidade, FD
+        - **Tipo de intervalo**: "fixo" ou "dinâmico"
+        - **intervalo**: Para fixo use formato "HH:MM as HH:MM", para dinâmico use "Início entre HH:MM-HH:MM, duração X"
+        - **probabilidade**: Valor entre 0 e 1 (probabilidade do equipamento estar ligado)
+        - **FD**: Fator de demanda (valor entre 0 e 1)
+        """)
+    else:
+        st.info("👆 Por favor, configure os dados dos cômodos acima e clique em 'Processar Dados Inseridos'.")
 
