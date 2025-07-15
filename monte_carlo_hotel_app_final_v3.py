@@ -672,22 +672,22 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     
     # 2. Resultados Estatísticos e Análise de Demanda
     pdf.set_font("Times", "B", 14)
-    pdf.multi_cell(0, 10, "2. RESULTADOS ESTATÍSTICOS E ANÁLISE DE DEMANDA", align="J")
+    pdf.multi_cell(190, 10, "2. RESULTADOS ESTATÍSTICOS E ANÁLISE DE DEMANDA", align="J")
     pdf.set_font("Times", "", 12)
-    pdf.multi_cell(0, 7, f"Demanda Média Máxima: {pico_medio:.0f} W", align="J")
-    pdf.multi_cell(0, 7, f"Demanda Máxima Absoluta: {pico_max:.0f} W", align="J")
-    pdf.multi_cell(0, 7, f"Demanda Mínima Observada: {pico_min:.0f} W", align="J")
-    pdf.multi_cell(0, 7, f"Percentil 95 (P95): {pico_95:.0f} W", align="J")
+    pdf.multi_cell(190, 7, f"Demanda Média Máxima: {pico_medio:.0f} W", align="J")
+    pdf.multi_cell(190, 7, f"Demanda Máxima Absoluta: {pico_max:.0f} W", align="J")
+    pdf.multi_cell(190, 7, f"Demanda Mínima Observada: {pico_min:.0f} W", align="J")
+    pdf.multi_cell(190, 7, f"Percentil 95 (P95): {pico_95:.0f} W", align="J")
     pdf.ln(5)
-    pdf.multi_cell(0, 7, f"O Percentil 95 (P95) de {pico_95:.0f} W representa o valor de demanda que é excedido em apenas 5% dos cenários simulados. Este valor é amplamente reconhecido na engenharia elétrica como referência para dimensionamento de sistemas, pois oferece um equilíbrio adequado entre segurança operacional e viabilidade econômica.", align="J")
-    pdf.multi_cell(0, 7, f"A Demanda Média Máxima de {pico_medio:.0f} W indica o valor esperado da demanda de pico, enquanto a Demanda Máxima Absoluta de {pico_max:.0f} W representa o cenário mais crítico observado nas simulações, que possui probabilidade muito baixa de ocorrência.", align="J")
+    pdf.multi_cell(190, 7, f"O Percentil 95 (P95) de {pico_95:.0f} W representa o valor de demanda que é excedido em apenas 5% dos cenários simulados. Este valor é amplamente reconhecido na engenharia elétrica como referência para dimensionamento de sistemas, pois oferece um equilíbrio adequado entre segurança operacional e viabilidade econômica.", align="J")
+    pdf.multi_cell(190, 7, f"A Demanda Média Máxima de {pico_medio:.0f} W indica o valor esperado da demanda de pico, enquanto a Demanda Máxima Absoluta de {pico_max:.0f} W representa o cenário mais crítico observado nas simulações, que possui probabilidade muito baixa de ocorrência.", align="J")
     pdf.ln(10)
 
     # 3. Configuração Detalhada dos Cômodos
     pdf.set_font("Times", "B", 14)
-    pdf.multi_cell(0, 10, "3. CONFIGURAÇÃO DETALHADA DOS CÔMODOS", align="J")
+    pdf.multi_cell(190, 10, "3. CONFIGURAÇÃO DETALHADA DOS CÔMODOS", align="J")
     pdf.set_font("Times", "B", 12)
-    pdf.multi_cell(0, 7, "3.1 Resumo por Tipo de Cômodo", align="J")
+    pdf.multi_cell(190, 7, "3.1 Resumo por Tipo de Cômodo", align="J")
     pdf.set_font("Times", "", 10)
 
     # Tabela de Resumo por Tipo de Cômodo
@@ -727,14 +727,14 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     # Tabela de Especificação Técnica dos Equipamentos
     if comodos_config_data:
         pdf.set_font("Times", "B", 12)
-        pdf.multi_cell(0, 7, "3.2 Especificação Técnica dos Equipamentos", align="J")
+        pdf.multi_cell(190, 7, "3.2 Especificação Técnica dos Equipamentos", align="J")
         pdf.set_font("Times", "", 10)
-        pdf.multi_cell(0, 7, "A tabela a seguir apresenta a configuração detalhada de cada equipamento por tipo de cômodo, incluindo características operacionais e parâmetros de simulação utilizados.", align="J")
+        pdf.multi_cell(190, 7, "A tabela a seguir apresenta a configuração detalhada de cada equipamento por tipo de cômodo, incluindo características operacionais e parâmetros de simulação utilizados.", align="J")
         pdf.ln(5)
         
         for comodo_nome, equipamentos_df_list in comodos_config_data.items():
             pdf.set_font("Times", "B", 11)
-            pdf.multi_cell(0, 7, f"Cômodo: {comodo_nome}", align="J")
+            pdf.multi_cell(190, 7, f"Cômodo: {comodo_nome}", align="J")
             pdf.set_font("Times", "", 9)
             
             equip_table_data = [["Equipamento", "Potência (W)", "Quantidade", "Tipo de Operação", "Período de Funcionamento", "Probabilidade de Uso", "Fator de Demanda"]]
@@ -773,14 +773,14 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     # 4. Análises Gráficas e Interpretações Técnicas
     if imagens_graficos:
         pdf.set_font("Times", "B", 14)
-        pdf.multi_cell(0, 10, "4. ANÁLISES GRÁFICAS E INTERPRETAÇÕES TÉCNICAS", align="J")
+        pdf.multi_cell(190, 10, "4. ANÁLISES GRÁFICAS E INTERPRETAÇÕES TÉCNICAS", align="J")
         pdf.set_font("Times", "", 12)
-        pdf.multi_cell(0, 7, "As análises gráficas apresentadas a seguir fornecem insights fundamentais sobre o comportamento da demanda elétrica do estabelecimento, permitindo uma compreensão abrangente dos padrões de consumo e suas implicações para o dimensionamento da infraestrutura.", align="J")
+        pdf.multi_cell(190, 7, "As análises gráficas apresentadas a seguir fornecem insights fundamentais sobre o comportamento da demanda elétrica do estabelecimento, permitindo uma compreensão abrangente dos padrões de consumo e suas implicações para o dimensionamento da infraestrutura.", align="J")
         pdf.ln(5)
         
         for imagem in imagens_graficos:
             pdf.set_font("Times", "B", 12)
-            pdf.multi_cell(0, 7, imagem["titulo"], align="C")
+            pdf.multi_cell(190, 7, imagem["titulo"], align="C")
             pdf.ln(2)
             
             # Adiciona a imagem
@@ -810,46 +810,46 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
 
     # 5. Análise Estatística Avançada
     pdf.set_font("Times", "B", 14)
-    pdf.multi_cell(0, 10, "5. ANÁLISE ESTATÍSTICA AVANÇADA", align="J")
+    pdf.multi_cell(190, 10, "5. ANÁLISE ESTATÍSTICA AVANÇADA", align="J")
     pdf.set_font("Times", "", 12)
-    pdf.multi_cell(0, 7, f"Desvio Padrão dos Picos: {desvio_padrao:.0f} W", align="J")
-    pdf.multi_cell(0, 7, f"Coeficiente de Variação: {coef_variacao:.1f}% - {interpretacao_diversidade}", align="J")
-    pdf.multi_cell(0, 7, f"Intervalo de Confiança (95%): {ic_inferior:.0f} W - {ic_superior:.0f} W", align="J")
-    pdf.multi_cell(0, 7, f"Amplitude de Variação: {(pico_max - pico_min):.0f} W", align="J")
+    pdf.multi_cell(190, 7, f"Desvio Padrão dos Picos: {desvio_padrao:.0f} W", align="J")
+    pdf.multi_cell(190, 7, f"Coeficiente de Variação: {coef_variacao:.1f}% - {interpretacao_diversidade}", align="J")
+    pdf.multi_cell(190, 7, f"Intervalo de Confiança (95%): {ic_inferior:.0f} W - {ic_superior:.0f} W", align="J")
+    pdf.multi_cell(190, 7, f"Amplitude de Variação: {(pico_max - pico_min):.0f} W", align="J")
     pdf.ln(5)
-    pdf.multi_cell(0, 7, f"Consumo Médio Diário: {consumo_medio:.1f} kWh", align="J")
-    pdf.multi_cell(0, 7, f"Fator de Carga Médio: {fator_carga_medio:.1f}% - {interpretacao_fator_carga}", align="J")
-    pdf.multi_cell(0, 7, f"Fator de Diversidade: {fator_diversidade:.2f}", align="J")
-    pdf.multi_cell(0, 7, f"Densidade de Carga: {(pico_medio / sum(instancias_por_comodo.values())):.2f} W/unidade", align="J")
+    pdf.multi_cell(190, 7, f"Consumo Médio Diário: {consumo_medio:.1f} kWh", align="J")
+    pdf.multi_cell(190, 7, f"Fator de Carga Médio: {fator_carga_medio:.1f}% - {interpretacao_fator_carga}", align="J")
+    pdf.multi_cell(190, 7, f"Fator de Diversidade: {fator_diversidade:.2f}", align="J")
+    pdf.multi_cell(190, 7, f"Densidade de Carga: {(pico_medio / sum(instancias_por_comodo.values())):.2f} W/unidade", align="J")
     pdf.ln(10)
 
     # 6. Recomendações Técnicas para Dimensionamento
     pdf.set_font("Times", "B", 14)
-    pdf.multi_cell(0, 10, "6. RECOMENDAÇÕES TÉCNICAS PARA DIMENSIONAMENTO", align="J")
+    pdf.multi_cell(190, 10, "6. RECOMENDAÇÕES TÉCNICAS PARA DIMENSIONAMENTO", align="J")
     pdf.set_font("Times", "", 12)
-    pdf.multi_cell(0, 7, f"Capacidade Recomendada para Transformadores: {capacidade_recomendada:.0f} W (P95 + 20% de margem de segurança)", align="J")
-    pdf.multi_cell(0, 7, "Dimensionamento de Condutores: Baseado na capacidade recomendada, considerando fatores de correção por temperatura e agrupamento conforme NBR 5410", align="J")
-    pdf.multi_cell(0, 7, "Sistemas de Proteção: Ajustes baseados no P95 com coordenação seletiva para garantir continuidade do serviço", align="J")
-    pdf.multi_cell(0, 7, f"Fator de Demanda Global: {(pico_95 / (pico_medio * 1.2)):.2f} para aplicação em projetos similares", align="J")
+    pdf.multi_cell(190, 7, f"Capacidade Recomendada para Transformadores: {capacidade_recomendada:.0f} W (P95 + 20% de margem de segurança)", align="J")
+    pdf.multi_cell(190, 7, "Dimensionamento de Condutores: Baseado na capacidade recomendada, considerando fatores de correção por temperatura e agrupamento conforme NBR 5410", align="J")
+    pdf.multi_cell(190, 7, "Sistemas de Proteção: Ajustes baseados no P95 com coordenação seletiva para garantir continuidade do serviço", align="J")
+    pdf.multi_cell(190, 7, f"Fator de Demanda Global: {(pico_95 / (pico_medio * 1.2)):.2f} para aplicação em projetos similares", align="J")
     pdf.ln(10)
 
     # 7. Conclusões e Considerações Finais
     pdf.set_font("Times", "B", 14)
-    pdf.multi_cell(0, 10, "7. CONCLUSÕES E CONSIDERAÇÕES FINAIS", align="J")
+    pdf.multi_cell(190, 10, "7. CONCLUSÕES E CONSIDERAÇÕES FINAIS", align="J")
     pdf.set_font("Times", "", 12)
-    pdf.multi_cell(0, 7, f"A simulação Monte Carlo realizada com {num_simulacoes:,} cenários independentes fornece uma base estatisticamente robusta para o dimensionamento da infraestrutura elétrica do estabelecimento hoteleiro. A metodologia de instâncias individualizadas permite capturar adequadamente o fator de diversidade, resultando em dimensionamentos mais precisos e economicamente otimizados.", align="J")
-    pdf.multi_cell(0, 7, "Os resultados apresentados baseiam-se nas configurações de equipamentos e padrões de uso fornecidos. Mudanças significativas no perfil de ocupação, introdução de novos tipos de equipamentos ou alterações nos hábitos dos usuários podem impactar os resultados e requerem reavaliação da simulação.", align="J")
-    pdf.multi_cell(0, 7, f"A capacidade recomendada de {capacidade_recomendada:.0f} W (baseada no P95 com margem de segurança) oferece um equilíbrio adequado entre confiabilidade operacional e viabilidade econômica. Esta recomendação considera as melhores práticas da engenharia elétrica e está alinhada com normas técnicas nacionais e internacionais.", align="J")
-    pdf.multi_cell(0, 7, "Recomenda-se fortemente a implementação de sistemas de monitoramento contínuo para validação dos resultados e refinamento progressivo dos modelos de simulação. Esta abordagem permite otimização contínua da operação e identificação precoce de necessidades de adequação da infraestrutura.", align="J")
+    pdf.multi_cell(190, 7, f"A simulação Monte Carlo realizada com {num_simulacoes:,} cenários independentes fornece uma base estatisticamente robusta para o dimensionamento da infraestrutura elétrica do estabelecimento hoteleiro. A metodologia de instâncias individualizadas permite capturar adequadamente o fator de diversidade, resultando em dimensionamentos mais precisos e economicamente otimizados.", align="J")
+    pdf.multi_cell(190, 7, "Os resultados apresentados baseiam-se nas configurações de equipamentos e padrões de uso fornecidos. Mudanças significativas no perfil de ocupação, introdução de novos tipos de equipamentos ou alterações nos hábitos dos usuários podem impactar os resultados e requerem reavaliação da simulação.", align="J")
+    pdf.multi_cell(190, 7, f"A capacidade recomendada de {capacidade_recomendada:.0f} W (baseada no P95 com margem de segurança) oferece um equilíbrio adequado entre confiabilidade operacional e viabilidade econômica. Esta recomendação considera as melhores práticas da engenharia elétrica e está alinhada com normas técnicas nacionais e internacionais.", align="J")
+    pdf.multi_cell(190, 7, "Recomenda-se fortemente a implementação de sistemas de monitoramento contínuo para validação dos resultados e refinamento progressivo dos modelos de simulação. Esta abordagem permite otimização contínua da operação e identificação precoce de necessidades de adequação da infraestrutura.", align="J")
     pdf.ln(10)
 
     # Rodapé
     pdf.set_font("Times", "I", 10)
-    pdf.multi_cell(0, 6, "Relatório Técnico Gerado Automaticamente", align="C")
-    pdf.multi_cell(0, 6, "Sistema: Simulação Monte Carlo com Instâncias Individualizadas", align="C")
-    pdf.multi_cell(0, 6, "Desenvolvido por Matheus Vianna | matheusvianna.com", align="C", link="https://matheusvianna.com")
-    pdf.multi_cell(0, 6, f"Análise baseada em {num_simulacoes:,} simulações independentes | Metodologia validada conforme práticas da engenharia elétrica", align="C")
-    pdf.multi_cell(0, 6, "Para questões técnicas ou esclarecimentos adicionais, consulte a documentação técnica do sistema", align="C")
+    pdf.multi_cell(190, 6, "Relatório Técnico Gerado Automaticamente", align="C")
+    pdf.multi_cell(190, 6, "Sistema: Simulação Monte Carlo com Instâncias Individualizadas", align="C")
+    pdf.multi_cell(190, 6, "Desenvolvido por Matheus Vianna | matheusvianna.com", align="C", link="https://matheusvianna.com")
+    pdf.multi_cell(190, 6, f"Análise baseada em {num_simulacoes:,} simulações independentes | Metodologia validada conforme práticas da engenharia elétrica", align="C")
+    pdf.multi_cell(190, 6, "Para questões técnicas ou esclarecimentos adicionais, consulte a documentação técnica do sistema", align="C")
 
     return pdf.output(dest='S').encode('latin1')
 
