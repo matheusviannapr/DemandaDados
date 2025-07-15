@@ -569,50 +569,58 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Times", size=12)
-
+    
+    # Definindo margens explícitas
+    pdf.set_left_margin(10)
+    pdf.set_right_margin(10)
+    pdf.set_x(10)
+    
     # Título do Relatório
     pdf.set_font("Times", "B", 16)
-    pdf.multi_cell(0, 10, "RELATÓRIO TÉCNICO DE SIMULAÇÃO MONTE CARLO", align="C")
+    pdf.multi_cell(190, 10, "RELATÓRIO TÉCNICO DE SIMULAÇÃO MONTE CARLO", align="C")
     pdf.set_font("Times", "", 12)
-    # Ajustando a largura da célula para o título secundário
-    pdf.multi_cell(w=190, h=8, txt="Análise de Carga Elétrica para Dimensionamento de Infraestrutura", align="C")
+    pdf.multi_cell(190, 8, "Análise de Carga Elétrica para Dimensionamento de Infraestrutura", align="C")
     pdf.ln(5)
-    pdf.multi_cell(0, 6, f"Data de geração: {datetime.now().strftime('%d/%m/%Y às %H:%M')}", align="C")
-    pdf.multi_cell(0, 6, "Sistema: Simulação Monte Carlo com Instâncias Individualizadas", align="C")
+    pdf.multi_cell(190, 6, f"Data de geração: {datetime.now().strftime('%d/%m/%Y às %H:%M')}", align="C")
+    pdf.multi_cell(190, 6, "Sistema: Simulação Monte Carlo com Instâncias Individualizadas", align="C")
     pdf.ln(10)
-
+    
     # Créditos do Desenvolvedor
-    pdf.set_fill_color(230, 242, 255) # Light blue background
-    pdf.rect(pdf.get_x(), pdf.get_y(), pdf.w - 2*pdf.l_margin, 40, 'F')
-    pdf.set_text_color(44, 62, 80) # Dark blue text
+    pdf.set_fill_color(230, 242, 255)  # Light blue background
+    y_current = pdf.get_y()
+    pdf.rect(10, y_current, 190, 40, 'F')
+    pdf.set_text_color(44, 62, 80)  # Dark blue text
     pdf.set_font("Times", "B", 14)
-    pdf.multi_cell(0, 8, "💻 Sistema Desenvolvido por Matheus Vianna", align="C")
+    pdf.set_y(y_current + 2)
+    pdf.multi_cell(190, 8, "💻 Sistema Desenvolvido por Matheus Vianna", align="C")
     pdf.set_font("Times", "", 10)
-    pdf.multi_cell(0, 6, "Engenheiro Especialista em Simulação Monte Carlo", align="C")
-    pdf.multi_cell(0, 6, "Website: matheusvianna.com", align="C", link="https://matheusvianna.com")
-    pdf.multi_cell(0, 6, "Sistema avançado para análise de carga elétrica utilizando técnicas de simulação Monte Carlo", align="C")
-    pdf.set_text_color(0, 0, 0) # Reset text color
+    pdf.multi_cell(190, 6, "Engenheiro Especialista em Simulação Monte Carlo", align="C")
+    pdf.multi_cell(190, 6, "Website: matheusvianna.com", align="C", link="https://matheusvianna.com")
+    pdf.multi_cell(190, 6, "Sistema avançado para análise de carga elétrica utilizando técnicas de simulação Monte Carlo", align="C")
+    pdf.set_text_color(0, 0, 0)
     pdf.ln(10)
-
+    
     # 1. Metodologia e Fundamentos Teóricos
     pdf.set_font("Times", "B", 14)
-    pdf.multi_cell(0, 10, "1. METODOLOGIA E FUNDAMENTOS TEÓRICOS", align="J")
+    pdf.multi_cell(190, 10, "1. METODOLOGIA E FUNDAMENTOS TEÓRICOS", align="J")
     pdf.set_font("Times", "", 12)
-    pdf.multi_cell(0, 7, "A simulação Monte Carlo é uma técnica estatística que utiliza amostragem aleatória repetitiva para obter resultados numéricos de problemas complexos. No contexto deste estudo, a metodologia foi aplicada para modelar o comportamento estocástico da demanda elétrica em estabelecimentos hoteleiros, considerando a variabilidade natural do uso de equipamentos pelos hóspedes.", align="J")
-    pdf.multi_cell(0, 7, f"O sistema implementado realiza {num_simulacoes:,} simulações independentes, cada uma representando um cenário possível de operação do hotel durante um período de {tempo_total // 60} horas. Esta abordagem permite capturar a incerteza inerente ao comportamento dos usuários e fornecer estatísticas robustas para o dimensionamento da infraestrutura elétrica.", align="J")
+    pdf.multi_cell(190, 7, "A simulação Monte Carlo é uma técnica estatística que utiliza amostragem aleatória repetitiva para obter resultados numéricos de problemas complexos. No contexto deste estudo, a metodologia foi aplicada para modelar o comportamento estocástico da demanda elétrica em estabelecimentos hoteleiros, considerando a variabilidade natural do uso de equipamentos pelos hóspedes.", align="J")
+    pdf.multi_cell(190, 7, f"O sistema implementado realiza {num_simulacoes:,} simulações independentes, cada uma representando um cenário possível de operação do hotel durante um período de {tempo_total // 60} horas. Esta abordagem permite capturar a incerteza inerente ao comportamento dos usuários e fornecer estatísticas robustas para o dimensionamento da infraestrutura elétrica.", align="J")
     pdf.ln(5)
+    
     pdf.set_font("Times", "B", 12)
-    pdf.multi_cell(0, 7, "1.1 Modelagem de Instâncias Individualizadas", align="J")
+    pdf.multi_cell(190, 7, "1.1 Modelagem de Instâncias Individualizadas", align="J")
     pdf.set_font("Times", "", 12)
-    pdf.multi_cell(0, 7, "Uma característica fundamental desta simulação é o tratamento individualizado de cada unidade habitacional. Quando o hotel possui múltiplas unidades do mesmo tipo (por exemplo, 28 quartos padrão), cada uma é modelada como uma entidade independente com seu próprio comportamento aleatório. Esta abordagem é crucial para capturar adequadamente o fator de diversidade, que representa a probabilidade de que nem todos os equipamentos operem simultaneamente em sua capacidade máxima.", align="J")
+    pdf.multi_cell(190, 7, "Uma característica fundamental desta simulação é o tratamento individualizado de cada unidade habitacional. Quando o hotel possui múltiplas unidades do mesmo tipo (por exemplo, 28 quartos padrão), cada uma é modelada como uma entidade independente com seu próprio comportamento aleatório. Esta abordagem é crucial para capturar adequadamente o fator de diversidade, que representa a probabilidade de que nem todos os equipamentos operem simultaneamente em sua capacidade máxima.", align="J")
     pdf.ln(5)
+    
     pdf.set_font("Times", "B", 12)
-    pdf.multi_cell(0, 7, "1.2 Parâmetros de Entrada e Configuração", align="J")
+    pdf.multi_cell(190, 7, "1.2 Parâmetros de Entrada e Configuração", align="J")
     pdf.set_font("Times", "", 12)
-    pdf.multi_cell(0, 7, f"Número total de simulações realizadas: {num_simulacoes:,}", align="J")
-    pdf.multi_cell(0, 7, f"Período de análise por simulação: {tempo_total} minutos ({tempo_total // 60} horas)", align="J")
-    pdf.multi_cell(0, 7, f"Resolução temporal: 1 minuto", align="J")
-    pdf.multi_cell(0, 7, f"Método de amostragem: Pseudo-aleatório com distribuições específicas por equipamento", align="J")
+    pdf.multi_cell(190, 7, f"Número total de simulações realizadas: {num_simulacoes:,}", align="J")
+    pdf.multi_cell(190, 7, f"Período de análise por simulação: {tempo_total} minutos ({tempo_total // 60} horas)", align="J")
+    pdf.multi_cell(190, 7, "Resolução temporal: 1 minuto", align="J")
+    pdf.multi_cell(190, 7, "Método de amostragem: Pseudo-aleatório com distribuições específicas por equipamento", align="J")
     pdf.ln(10)
 
     # Calcula estatísticas adicionais
