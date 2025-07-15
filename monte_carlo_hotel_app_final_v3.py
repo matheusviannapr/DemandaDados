@@ -222,7 +222,7 @@ try:
     logo = Image.open("logo_demanda_dados.png")
 
     # Cria três colunas: esquerda (1), centro (2), direita (1)
-    col_esq, col_central, col_dir = st.columns([1, 3, 1])
+    col_esq, col_central, col_dir = st.columns([1, 4, 1])
 
     with col_central:
         st.image(logo, use_container_width=True)
