@@ -230,13 +230,13 @@ try:
     col_logo, col_spacer = st.columns([1, 3])
     
     with col_logo:
-        st.image(logo, width=200)
+        st.image(logo, width=600)
     
     st.markdown("""
         </div>
         <div class="title-overlay">
-            <h1>Demandas e Dados - Simulação Monte Carlo para Análise de Carga Elétrica </h1>
-            <p>Sistema avançado de simulação para dimensionamento de infraestrutura elétrica</p>
+            <h1>Demandas e Dados - Simulação para Análise de Carga Elétrica </h1>
+            
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -245,8 +245,8 @@ except:
     st.markdown("""
     <div class="logo-banner">
         <div class="title-overlay" style="left: 50%; transform: translate(-50%, -50%); text-align: center;">
-            <h1>Simulação Monte Carlo para Análise de Carga Elétrica em Hotel</h1>
-            <p>Sistema avançado de simulação para dimensionamento de infraestrutura elétrica</p>
+            <h1>Demandas e Dados - Simulação para Análise de Carga Elétrica</h1>
+            
         </div>
     </div>
     """, unsafe_allow_html=True)
