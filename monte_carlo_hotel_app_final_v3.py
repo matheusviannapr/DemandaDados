@@ -575,7 +575,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.multi_cell(0, 10, "RELATÓRIO TÉCNICO DE SIMULAÇÃO MONTE CARLO", align="C")
     pdf.set_font("Times", "", 12)
     # Ajustando a largura da célula para o título secundário
-    pdf.multi_cell(0, 8, "Análise de Carga Elétrica para Dimensionamento de Infraestrutura Hoteleira", align="C")
+   pdf.multi_cell(w=190, h=8, txt="Análise de Carga Elétrica para Dimensionamento de Infraestrutura", align="C")
     pdf.ln(5)
     pdf.multi_cell(0, 6, f"Data de geração: {datetime.now().strftime('%d/%m/%Y às %H:%M')}", align="C")
     pdf.multi_cell(0, 6, "Sistema: Simulação Monte Carlo com Instâncias Individualizadas", align="C")
