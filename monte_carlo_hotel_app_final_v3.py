@@ -226,7 +226,7 @@ try:
     col_logo, col_spacer = st.columns([1, 3])
     
     with col_logo:
-        st.image(logo, width=1200)
+        st.image(logo, width=100vw)
     
     st.markdown("""
         <div class="title-overlay">
