@@ -220,28 +220,21 @@ with st.sidebar:
 # Cabeçalho com logo em faixa horizontal
 try:
     logo = Image.open("logo_demanda_dados.png")
-    
-    
-    # Coluna para a logo
-    col_logo, col_spacer = st.columns([1, 3])
-    
-    with col_logo:
-        st.image(logo, width=100vw)
-    
+
+    # Cria três colunas: esquerda (1), centro (2), direita (1)
+    col_esq, col_central, col_dir = st.columns([1, 3, 1])
+
+    with col_central:
+        st.image(logo, use_column_width=True)
+
+    # Título abaixo da logo
     st.markdown("""
-        <div class="title-overlay">
-            <h1>Demandas e Dados - Simulação para Análise de Carga Elétrica </h1>
-        </div>
+        <h1 style="text-align:center;">Demandas e Dados - Simulação para Análise de Carga Elétrica</h1>
     """, unsafe_allow_html=True)
-    
+
 except:
     st.markdown("""
-    <div class="logo-banner">
-        <div class="title-overlay" style="left: 50%; transform: translate(-50%, -50%); text-align: center;">
-            <h1>Demandas e Dados - Simulação para Análise de Carga Elétrica</h1>
-            
-        </div>
-    </div>
+        <h1 style="text-align:center;">Demandas e Dados - Simulação para Análise de Carga Elétrica</h1>
     """, unsafe_allow_html=True)
 
 # Seção "Como Usar o Aplicativo"
