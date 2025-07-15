@@ -221,23 +221,17 @@ with st.sidebar:
 try:
     logo = Image.open("logo_demanda_dados.png")
     
-    st.markdown("""
-    <div class="logo-banner">
-        <div style="position: absolute; left: 30px; top: 50%; transform: translateY(-50%);">
-    """, unsafe_allow_html=True)
     
     # Coluna para a logo
     col_logo, col_spacer = st.columns([1, 3])
     
     with col_logo:
-        st.image(logo, width=600)
+        st.image(logo, width=1200)
     
     st.markdown("""
-        
         <div class="title-overlay">
             <h1>Demandas e Dados - Simulação para Análise de Carga Elétrica </h1>
         </div>
-        
     """, unsafe_allow_html=True)
     
 except:
