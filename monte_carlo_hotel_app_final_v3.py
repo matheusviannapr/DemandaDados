@@ -583,7 +583,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
 
     # Créditos do Desenvolvedor
     pdf.set_fill_color(230, 242, 255) # Light blue background
-    pdf.rect(pdf.get_x(), pdf.get_y(), pdf.w - 2*pdf.l_margin, 40, \'F\')
+    pdf.rect(pdf.get_x(), pdf.get_y(), pdf.w - 2*pdf.l_margin, 40, 'F')
     pdf.set_text_color(44, 62, 80) # Dark blue text
     pdf.set_font("Times", "B", 14)
     pdf.multi_cell(0, 8, "💻 Sistema Desenvolvido por Matheus Vianna", align="C")
