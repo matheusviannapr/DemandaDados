@@ -219,7 +219,7 @@ with st.sidebar:
 
 # Cabeçalho com logo em faixa horizontal
 try:
-    logo = Image.open("/home/ubuntu/logo_demanda_dados.png")
+    logo = Image.open("logo_demanda_dados.png")
     
     st.markdown("""
     <div class="logo-banner">
@@ -558,7 +558,7 @@ def simula_carga_total(comodos: List[Comodo],
 def salvar_grafico(fig, nome_arquivo):
     """Salva um gráfico matplotlib como imagem PNG"""
     caminho = f"/tmp/{nome_arquivo}.png"
-    fig.savefig(caminho, dpi=300, bbox_inches=\'tight\', facecolor=\'white\')
+    fig.savefig(caminho, dpi=300, bbox_inches='tight', facecolor='white')
     return caminho
 
 # Função para gerar PDF com os resultados (versão aprimorada com FPDF2)
@@ -577,13 +577,13 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     # Ajustando a largura da célula para o título secundário
     pdf.multi_cell(0, 8, "Análise de Carga Elétrica para Dimensionamento de Infraestrutura Hoteleira", align="C")
     pdf.ln(5)
-    pdf.multi_cell(0, 6, f"Data de geração: {datetime.now().strftime(\"%d/%m/%Y às %H:%M\")}", align="C")
+    pdf.multi_cell(0, 6, f"Data de geração: {datetime.now().strftime('%d/%m/%Y às %H:%M')}", align="C")
     pdf.multi_cell(0, 6, "Sistema: Simulação Monte Carlo com Instâncias Individualizadas", align="C")
     pdf.ln(10)
 
     # Créditos do Desenvolvedor
     pdf.set_fill_color(230, 242, 255) # Light blue background
-    pdf.rect(pdf.get_x(), pdf.get_y(), pdf.w - 2*pdf.l_margin, 40, \'F\')
+    pdf.rect(pdf.get_x(), pdf.get_y(), pdf.w - 2*pdf.l_margin, 40, 'F')
     pdf.set_text_color(44, 62, 80) # Dark blue text
     pdf.set_font("Times", "B", 14)
     pdf.multi_cell(0, 8, "💻 Sistema Desenvolvido por Matheus Vianna", align="C")
@@ -843,7 +843,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.multi_cell(0, 6, f"Análise baseada em {num_simulacoes:,} simulações independentes | Metodologia validada conforme práticas da engenharia elétrica", align="C")
     pdf.multi_cell(0, 6, "Para questões técnicas ou esclarecimentos adicionais, consulte a documentação técnica do sistema", align="C")
 
-    return pdf.output(dest=\'S\').encode(\'latin1\')
+    return pdf.output(dest='S').encode('latin1')
 
 # --- Interface do Streamlit ---
 
@@ -869,9 +869,9 @@ if entrada_dados == "📁 Upload de arquivo Excel":
     if uploaded_file is not None:
         try:
             # Carrega os cômodos do arquivo Excel
-            if \'comodos\' not in st.session_state or st.session_state.get(\'data_source\') != \'excel\':
+            if 'comodos' not in st.session_state or st.session_state.get('data_source') != 'excel':
                 st.session_state.comodos = cria_comodos_do_excel(uploaded_file)
-                st.session_state.data_source = \'excel\'
+                st.session_state.data_source = 'excel'
             
             # Mostra informações sobre os cômodos carregados
             st.success(f"✅ {len(st.session_state.comodos)} cômodos carregados:")
@@ -886,7 +886,7 @@ else:  # Entrada direta de dados
     st.subheader("✏️ Entrada direta de dados")
     
     # Inicializa o estado se necessário
-    if \'comodos_data\' not in st.session_state:
+    if 'comodos_data' not in st.session_state:
         st.session_state.comodos_data = {}
     
     # Número de tipos de cômodos
@@ -988,13 +988,13 @@ else:  # Entrada direta de dados
                     )
                 
                 equipamentos_data.append({
-                    \'Equipamento\': nome_eq,
-                    \'Potência\': potencia,
-                    \'Quantidade\': quantidade,
-                    \'Tipo de intervalo\': tipo_intervalo,
-                    \'intervalo\': intervalo,
-                    \'probabilidade\': probabilidade,
-                    \'FD\': fd
+                    'Equipamento': nome_eq,
+                    'Potência': potencia,
+                    'Quantidade': quantidade,
+                    'Tipo de intervalo': tipo_intervalo,
+                    'intervalo': intervalo,
+                    'probabilidade': probabilidade,
+                    'FD': fd
                 })
             
             # Armazena os dados do cômodo
@@ -1005,7 +1005,7 @@ else:  # Entrada direta de dados
         try:
             # Cria os cômodos a partir dos dados inseridos
             st.session_state.comodos = cria_comodos_do_dataframe(st.session_state.comodos_data)
-            st.session_state.data_source = \'manual\'
+            st.session_state.data_source = 'manual'
             
             st.success(f"✅ {len(st.session_state.comodos)} cômodos processados:")
             for comodo in st.session_state.comodos:
@@ -1015,7 +1015,7 @@ else:  # Entrada direta de dados
             st.error(f"Erro ao processar dados: {str(e)}")
 
 # Continua apenas se houver cômodos carregados
-if \'comodos\' in st.session_state and st.session_state.comodos:
+if 'comodos' in st.session_state and st.session_state.comodos:
     
     # Seção 2: Parâmetros de Simulação
     st.header("🎯 Parâmetros de Simulação")
@@ -1078,18 +1078,18 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
             
             # Armazena os resultados no session_state
             st.session_state.resultados = {
-                \'picos\': picos,
-                \'perfis\': perfis,
-                \'consumos\': consumos,
-                \'instancias_por_comodo\': instancias_por_comodo,
-                \'num_simulacoes\': num_simulacoes,
-                \'tempo_total\': tempo_total
+                'picos': picos,
+                'perfis': perfis,
+                'consumos': consumos,
+                'instancias_por_comodo': instancias_por_comodo,
+                'num_simulacoes': num_simulacoes,
+                'tempo_total': tempo_total
             }
         
         st.success("✅ Simulação concluída!")
     
     # Seção 5: Resultados (exibidos abaixo se disponíveis)
-    if \'resultados\' in st.session_state:
+    if 'resultados' in st.session_state:
         st.header("📊 Resultados da Simulação")
         
         resultados = st.session_state.resultados
@@ -1113,16 +1113,16 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
                     
                     # 1. Distribuição dos picos
                     fig, ax = plt.subplots(figsize=(10, 6))
-                    ax.hist(picos, bins=30, alpha=0.7, edgecolor=\'black\', density=True)
-                    ax.axvline(pico_medio, color=\'red\', linestyle=\'dashed\', linewidth=2, label=f\'Média: {pico_medio:.0f} W\')
-                    ax.axvline(pico_95, color=\'green\', linestyle=\'dashed\', linewidth=2, label=f\'P95: {pico_95:.0f} W\')
+                    ax.hist(picos, bins=30, alpha=0.7, edgecolor='black', density=True)
+                    ax.axvline(pico_medio, color='red', linestyle='dashed', linewidth=2, label=f'Média: {pico_medio:.0f} W')
+                    ax.axvline(pico_95, color='green', linestyle='dashed', linewidth=2, label=f'P95: {pico_95:.0f} W')
                     ax.set_title("Distribuição dos Picos de Carga")
                     ax.set_xlabel("Pico de Carga (W)")
                     ax.set_ylabel("Frequência Normalizada")
                     ax.legend()
                     ax.grid(True)
                     caminho_img = salvar_grafico(fig, "distribuicao_picos")
-                    imagens_graficos.append({\'titulo\': "Distribuição dos Picos de Carga", \'caminho\': caminho_img, \'descricao\': "Este histograma apresenta a distribuição estatística dos picos de demanda elétrica obtidos através das simulações Monte Carlo. A análise da forma da distribuição fornece insights sobre a previsibilidade do comportamento da carga: distribuições mais concentradas (baixo desvio padrão) indicam comportamento mais previsível, enquanto distribuições mais dispersas sugerem maior variabilidade operacional. A linha vermelha tracejada representa a demanda média máxima esperada, enquanto a linha verde indica o percentil 95 (P95), valor amplamente utilizado na engenharia elétrica como referência para dimensionamento de transformadores e sistemas de proteção, pois garante que 95% dos cenários simulados apresentem demanda inferior a este valor."})
+                    imagens_graficos.append({'titulo': "Distribuição dos Picos de Carga", 'caminho': caminho_img, 'descricao': "Este histograma apresenta a distribuição estatística dos picos de demanda elétrica obtidos através das simulações Monte Carlo. A análise da forma da distribuição fornece insights sobre a previsibilidade do comportamento da carga: distribuições mais concentradas (baixo desvio padrão) indicam comportamento mais previsível, enquanto distribuições mais dispersas sugerem maior variabilidade operacional. A linha vermelha tracejada representa a demanda média máxima esperada, enquanto a linha verde indica o percentil 95 (P95), valor amplamente utilizado na engenharia elétrica como referência para dimensionamento de transformadores e sistemas de proteção, pois garante que 95% dos cenários simulados apresentem demanda inferior a este valor."})
                     plt.close(fig)
                     
                     # 2. Curva de duração de carga
@@ -1138,7 +1138,7 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
                     ax.grid(True)
                     ax.legend()
                     caminho_img = salvar_grafico(fig, "curva_duracao")
-                    imagens_graficos.append({\'titulo\': "Curva de Duração de Carga", \'caminho\': caminho_img, \'descricao\': "A Curva de Duração de Carga (CDC) é uma ferramenta fundamental para análise energética que apresenta os valores de demanda em ordem decrescente de magnitude, revelando por quanto tempo cada nível de carga é mantido ou excedido durante o período analisado. Esta curva é essencial para estudos de viabilidade econômica de sistemas de geração distribuída, dimensionamento de sistemas de armazenamento de energia e análise de contratos de fornecimento com tarifação diferenciada por horário. A inclinação da curva indica a variabilidade da demanda: curvas mais íngremes sugerem grandes variações entre picos e vales de consumo, enquanto curvas mais suaves indicam demanda mais constante ao longo do tempo."})
+                    imagens_graficos.append({'titulo': "Curva de Duração de Carga", 'caminho': caminho_img, 'descricao': "A Curva de Duração de Carga (CDC) é uma ferramenta fundamental para análise energética que apresenta os valores de demanda em ordem decrescente de magnitude, revelando por quanto tempo cada nível de carga é mantido ou excedido durante o período analisado. Esta curva é essencial para estudos de viabilidade econômica de sistemas de geração distribuída, dimensionamento de sistemas de armazenamento de energia e análise de contratos de fornecimento com tarifação diferenciada por horário. A inclinação da curva indica a variabilidade da demanda: curvas mais íngremes sugerem grandes variações entre picos e vales de consumo, enquanto curvas mais suaves indicam demanda mais constante ao longo do tempo."})
                     plt.close(fig)
                     
                     # 3. Perfil de carga médio
@@ -1146,15 +1146,15 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
                     horas = np.arange(tempo_total) / 60.0
                     
                     fig, ax = plt.subplots(figsize=(12, 6))
-                    ax.plot(horas, media_por_minuto, linewidth=2, label="Carga Média", color=\'#2c3e50\')
-                    ax.fill_between(horas, media_por_minuto, alpha=0.3, color=\'#3498db\')
+                    ax.plot(horas, media_por_minuto, linewidth=2, label="Carga Média", color='#2c3e50')
+                    ax.fill_between(horas, media_por_minuto, alpha=0.3, color='#3498db')
                     ax.set_xlabel("Hora do Dia")
                     ax.set_ylabel("Carga (W)")
                     ax.set_title("Perfil de Carga Médio Durante o Dia")
                     ax.grid(True, alpha=0.3)
                     ax.legend()
                     caminho_img = salvar_grafico(fig, "perfil_carga")
-                    imagens_graficos.append({\'titulo\': "Perfil de Carga Médio Durante o Dia", \'caminho\': caminho_img, \'descricao\': "O perfil de carga médio representa o comportamento típico da demanda elétrica ao longo de um ciclo diário de 24 horas, calculado a partir da média aritmética de todas as simulações realizadas. Este gráfico é fundamental para o planejamento operacional do sistema elétrico, permitindo identificar os horários de maior e menor demanda, que são cruciais para estratégias de gestão energética e otimização de custos. Os picos de demanda geralmente coincidem com períodos de maior atividade dos hóspedes, como check-in/check-out, horários de refeições e períodos noturnos. A análise deste perfil também orienta decisões sobre implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
+                    imagens_graficos.append({'titulo': "Perfil de Carga Médio Durante o Dia", 'caminho': caminho_img, 'descricao': "O perfil de carga médio representa o comportamento típico da demanda elétrica ao longo de um ciclo diário de 24 horas, calculado a partir da média aritmética de todas as simulações realizadas. Este gráfico é fundamental para o planejamento operacional do sistema elétrico, permitindo identificar os horários de maior e menor demanda, que são cruciais para estratégias de gestão energética e otimização de custos. Os picos de demanda geralmente coincidem com períodos de maior atividade dos hóspedes, como check-in/check-out, horários de refeições e períodos noturnos. A análise deste perfil também orienta decisões sobre implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
                     plt.close(fig)
                     
                     # 4. Gráfico de potência cumulativa por cômodo
@@ -1181,12 +1181,12 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
                         ax.set_xlabel("Hora do Dia")
                         ax.set_ylabel("Potência (W)")
                         ax.set_title("Potência Cumulativa por Cômodo ao Longo do Dia")
-                        ax.legend(loc=\'upper left\', bbox_to_anchor=(1, 1))
+                        ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
                         ax.grid(True, alpha=0.3)
                         plt.tight_layout()
                         
                         caminho_img = salvar_grafico(fig, "potencia_cumulativa_comodo")
-                        imagens_graficos.append({\'titulo\': "Potência Cumulativa por Cômodo ao Longo do Dia", \'caminho\': caminho_img, \'descricao\': "Este gráfico de área empilhada (stackplot) ilustra a contribuição individual de cada tipo de cômodo para a demanda total do estabelecimento ao longo do ciclo diário. A análise permite identificar quais categorias de cômodos são os principais consumidores de energia em diferentes horários, fornecendo informações valiosas para estratégias de eficiência energética e priorização de investimentos. A espessura de cada camada representa a magnitude da contribuição de cada tipo de cômodo, enquanto a variação ao longo do tempo revela padrões de uso específicos. Esta visualização é particularmente útil para gestores hoteleiros na tomada de decisões sobre retrofit de equipamentos, implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
+                        imagens_graficos.append({'titulo': "Potência Cumulativa por Cômodo ao Longo do Dia", 'caminho': caminho_img, 'descricao': "Este gráfico de área empilhada (stackplot) ilustra a contribuição individual de cada tipo de cômodo para a demanda total do estabelecimento ao longo do ciclo diário. A análise permite identificar quais categorias de cômodos são os principais consumidores de energia em diferentes horários, fornecendo informações valiosas para estratégias de eficiência energética e priorização de investimentos. A espessura de cada camada representa a magnitude da contribuição de cada tipo de cômodo, enquanto a variação ao longo do tempo revela padrões de uso específicos. Esta visualização é particularmente útil para gestores hoteleiros na tomada de decisões sobre retrofit de equipamentos, implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
                         plt.close(fig)
                     
                     # Gera o PDF com as imagens
@@ -1196,12 +1196,12 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
                         num_simulacoes, 
                         tempo_total,
                         imagens_graficos,
-                        st.session_state.comodos_data if st.session_state.data_source == \'manual\' else None,
+                        st.session_state.comodos_data if st.session_state.data_source == 'manual' else None,
                         st.session_state.comodos
                     )
                     
                     # Cria link para download
-                    b64_pdf = base64.b64encode(pdf_data).decode(\'latin1\')
+                    b64_pdf = base64.b64encode(pdf_data).decode('latin1')
                     href = f"\n<a href=\"data:application/pdf;base64,{b64_pdf}\" download=\"relatorio_tecnico_monte_carlo.pdf\">📥 Download do Relatório Técnico PDF</a>\n"
                     st.markdown(href, unsafe_allow_html=True)
                     st.success("✅ Relatório técnico PDF gerado com sucesso!")
@@ -1210,16 +1210,16 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("Pico Médio", f\' {pico_medio:.0f} W\')
+            st.metric("Pico Médio", f' {pico_medio:.0f} W')
         
         with col2:
-            st.metric("Pico Máximo", f\' {pico_max:.0f} W\')
+            st.metric("Pico Máximo", f' {pico_max:.0f} W')
         
         with col3:
-            st.metric("Pico Mínimo", f\' {pico_min:.0f} W\')
+            st.metric("Pico Mínimo", f' {pico_min:.0f} W')
         
         with col4:
-            st.metric("Percentil 95", f\' {pico_95:.0f} W\')
+            st.metric("Percentil 95", f' {pico_95:.0f} W')
         
         # Tabs para diferentes análises (removida a aba "Variação da Carga")
         tab1, tab2, tab3, tab4 = st.tabs([
@@ -1234,9 +1234,9 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
             st.write("Este histograma apresenta a distribuição estatística dos picos de demanda elétrica obtidos através das simulações Monte Carlo. A análise da forma da distribuição fornece insights sobre a previsibilidade do comportamento da carga: distribuições mais concentradas (baixo desvio padrão) indicam comportamento mais previsível, enquanto distribuições mais dispersas sugerem maior variabilidade operacional. A linha vermelha tracejada representa a demanda média máxima esperada, enquanto a linha verde indica o percentil 95 (P95), valor amplamente utilizado na engenharia elétrica como referência para dimensionamento de transformadores e sistemas de proteção, pois garante que 95% dos cenários simulados apresentem demanda inferior a este valor.")
             
             fig, ax = plt.subplots(figsize=(10, 6))
-            ax.hist(picos, bins=30, alpha=0.7, edgecolor=\'black\', density=True, color=\'#3498db\')
-            ax.axvline(pico_medio, color=\'red\', linestyle=\'dashed\', linewidth=2, label=f\'Média: {pico_medio:.0f} W\')
-            ax.axvline(pico_95, color=\'green\', linestyle=\'dashed\', linewidth=2, label=f\'P95: {pico_95:.0f} W\')
+            ax.hist(picos, bins=30, alpha=0.7, edgecolor='black', density=True, color='#3498db')
+            ax.axvline(pico_medio, color='red', linestyle='dashed', linewidth=2, label=f'Média: {pico_medio:.0f} W')
+            ax.axvline(pico_95, color='green', linestyle='dashed', linewidth=2, label=f'P95: {pico_95:.0f} W')
             ax.set_title("Distribuição Global dos Picos de Carga")
             ax.set_xlabel("Pico de Carga (W)")
             ax.set_ylabel("Frequência Normalizada")
@@ -1252,7 +1252,7 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
             prob_excedencia = 1 - (np.arange(1, len(picos_sorted) + 1) / len(picos_sorted))
             
             fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(picos_sorted, prob_excedencia * 100, label="Probabilidade de Excedência", linewidth=2, color=\'#e74c3c\')
+            ax.plot(picos_sorted, prob_excedencia * 100, label="Probabilidade de Excedência", linewidth=2, color='#e74c3c')
             ax.set_title("Probabilidade de Excedência dos Picos Diários")
             ax.set_xlabel("Pico de Carga (W)")
             ax.set_ylabel("Probabilidade de Excedência (%)")
@@ -1269,7 +1269,7 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
             frac_tempo = np.arange(1, len(todas_cargas_sorted) + 1) / len(todas_cargas_sorted)
             
             fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(frac_tempo * 100, todas_cargas_sorted, label="Curva de Duração", linewidth=2, color=\'#9b59b6\')
+            ax.plot(frac_tempo * 100, todas_cargas_sorted, label="Curva de Duração", linewidth=2, color='#9b59b6')
             ax.set_title("Curva de Duração de Carga (Hotel)")
             ax.set_xlabel("Fração do Tempo (%)")
             ax.set_ylabel("Carga (W)")
@@ -1285,8 +1285,8 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
             horas = np.arange(tempo_total) / 60.0
             
             fig, ax = plt.subplots(figsize=(12, 6))
-            ax.plot(horas, media_por_minuto, linewidth=2, label="Carga Média", color=\'#2c3e50\')
-            ax.fill_between(horas, media_por_minuto, alpha=0.3, color=\'#3498db\')
+            ax.plot(horas, media_por_minuto, linewidth=2, label="Carga Média", color='#2c3e50')
+            ax.fill_between(horas, media_por_minuto, alpha=0.3, color='#3498db')
             ax.set_xlabel("Hora do Dia")
             ax.set_ylabel("Carga (W)")
             ax.set_title("Perfil de Carga Médio Durante o Dia")
@@ -1309,12 +1309,12 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
                 fator_carga_por_hora.append(fator)
             
             fig, ax = plt.subplots(figsize=(10, 6))
-            ax.bar(np.arange(24), fator_carga_por_hora, color=\'#f39c12\', alpha=0.8)
+            ax.bar(np.arange(24), fator_carga_por_hora, color='#f39c12', alpha=0.8)
             ax.set_xlabel("Hora do Dia")
             ax.set_ylabel("Fator de Carga")
             ax.set_title("Fator de Carga por Hora do Dia")
             ax.set_xticks(np.arange(24))
-            ax.grid(True, axis=\'y\', linestyle=\'--\', alpha=0.7)
+            ax.grid(True, axis='y', linestyle='--', alpha=0.7)
             st.pyplot(fig)
         
         with tab4:
@@ -1345,7 +1345,7 @@ if \'comodos\' in st.session_state and st.session_state.comodos:
                 ax.set_xlabel("Hora do Dia")
                 ax.set_ylabel("Potência (W)")
                 ax.set_title("Potência Cumulativa por Cômodo ao Longo do Dia")
-                ax.legend(loc=\'upper left\', bbox_to_anchor=(1, 1))
+                ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
                 ax.grid(True, alpha=0.3)
                 plt.tight_layout()
                 st.pyplot(fig)
@@ -1360,13 +1360,13 @@ else:
         st.subheader("📋 Formato Esperado do Arquivo Excel")
         
         exemplo_df = pd.DataFrame({
-            \'Equipamento\': [\'Ar Condicionado\', \'Iluminação\', \'TV\'],
-            \'Potência\': [2000, 100, 150],
-            \'Quantidade\': [1, 4, 1],
-            \'Tipo de intervalo\': [\'dinâmico\', \'fixo\', \'fixo\'],
-            \'intervalo\': [\'Início entre 14:00-18:00, duração 6\', \'18:00 as 23:00\', \'19:00 as 23:00\'],
-            \'probabilidade\': [0.8, 1.0, 0.9],
-            \'FD\': [0.8, 1.0, 1.0]
+            'Equipamento': ['Ar Condicionado', 'Iluminação', 'TV'],
+            'Potência': [2000, 100, 150],
+            'Quantidade': [1, 4, 1],
+            'Tipo de intervalo': ['dinâmico', 'fixo', 'fixo'],
+            'intervalo': ['Início entre 14:00-18:00, duração 6', '18:00 as 23:00', '19:00 as 23:00'],
+            'probabilidade': [0.8, 1.0, 0.9],
+            'FD': [0.8, 1.0, 1.0]
         })
         
         st.dataframe(exemplo_df)
@@ -1381,7 +1381,9 @@ else:
         - **FD**: Fator de demanda (valor entre 0 e 1)
         """)
     else:
-        st.info("👆 Por favor, configure os dados dos cômodos acima e clique em \'Processar Dados Inseridos\'.")
+        st.info("👆 Por favor, configure os dados dos cômodos acima e clique em 'Processar Dados Inseridos'.")
+
+
 
 
 
