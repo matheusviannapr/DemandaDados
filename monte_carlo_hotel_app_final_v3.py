@@ -230,12 +230,11 @@ try:
         st.image(logo, use_container_width=True)
     
     st.markdown("""
-        </div>
-        <div class="title-overlay">
-            <h1>Simulação Monte Carlo para Análise de Carga Elétrica em Hotel</h1>
-            <p>Sistema avançado de simulação para dimensionamento de infraestrutura elétrica</p>
-        </div>
-    </div>
+        
+            Simulação Monte Carlo para Análise de Carga Elétrica em Hotel
+            Sistema avançado de simulação para dimensionamento de infraestrutura elétrica
+     
+ 
     """, unsafe_allow_html=True)
     
 except:
