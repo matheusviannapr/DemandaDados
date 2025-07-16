@@ -574,8 +574,6 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.ln(10)
 
     # Créditos do Desenvolvedor
-    pdf.set_fill_color(230, 242, 255) # Light blue background
-    pdf.rect(pdf.get_x(), pdf.get_y(), pdf.w - 2*pdf.l_margin, 40, "F")
     pdf.set_text_color(44, 62, 80) # Dark blue text
     pdf.set_font("Times", "B", 14)
     pdf.multi_cell(190, 8, " Sistema Desenvolvido por Matheus Vianna", align="C")
@@ -687,6 +685,8 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, "3.1 Resumo por Tipo de Cômodo", align="J")
     pdf.set_font("Times", "", 10)
+    pdf.set_x(pdf.l_margin)
+    
 
     # Tabela de Resumo por Tipo de Cômodo
     table_data = [["Tipo de Cômodo", "Número de Instâncias", "Demanda Estimada por Instância (W)", "Contribuição Total (%)"]]
@@ -812,14 +812,22 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.set_font("Times", "B", 14)
     pdf.multi_cell(190, 10, "5. ANÁLISE ESTATÍSTICA AVANÇADA", align="J")
     pdf.set_font("Times", "", 12)
+    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, f"Desvio Padrão dos Picos: {desvio_padrao:.0f} W", align="J")
+    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, f"Coeficiente de Variação: {coef_variacao:.1f}% - {interpretacao_diversidade}", align="J")
+    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, f"Intervalo de Confiança (95%): {ic_inferior:.0f} W - {ic_superior:.0f} W", align="J")
+    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, f"Amplitude de Variação: {(pico_max - pico_min):.0f} W", align="J")
+    pdf.set_x(pdf.l_margin)
     pdf.ln(5)
     pdf.multi_cell(190, 7, f"Consumo Médio Diário: {consumo_medio:.1f} kWh", align="J")
+    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, f"Fator de Carga Médio: {fator_carga_medio:.1f}% - {interpretacao_fator_carga}", align="J")
+    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, f"Fator de Diversidade: {fator_diversidade:.2f}", align="J")
+    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, f"Densidade de Carga: {(pico_medio / sum(instancias_por_comodo.values())):.2f} W/unidade", align="J")
     pdf.ln(10)
 
