@@ -204,8 +204,8 @@ with st.sidebar:
     <div class="credits-container">
         <h3>💻 Desenvolvido por</h3>
         <p><strong>Matheus Vianna</strong></p>
-        <p>Engenheiro Especialista em Simulação Monte Carlo</p>
-        <p>📧 Contato: <a href="mailto:contato@matheusvianna.com">contato@matheusvianna.com</a></p>
+        <p>Engenheiro Especialista em Python</p>
+        <p>📧 Contato: <a href="mailto:matheusviannapr@gmail.com">matheusviannapr@gmail.com</a></p>
         <p>🌐 Website: <a href="https://matheusvianna.com" target="_blank">matheusvianna.com</a></p>
         <hr style="border-color: #5d6d7e; margin: 15px 0;">
         <p style="font-size: 0.8rem; color: #95a5a6;">
