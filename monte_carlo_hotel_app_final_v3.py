@@ -230,7 +230,7 @@ try:
         st.image(logo, use_container_width=True)
     
     st.markdown("""
-            ### 🎯 ** Simulação Monte Carlo para Análise de Carga Elétrica em Hotel**
+            ###  **Simulação Monte Carlo para Análise de Carga Elétrica em Hotel**
     """, unsafe_allow_html=True)
     
 except:
