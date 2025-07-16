@@ -230,7 +230,7 @@ try:
     col_esq, col_central, col_dir = st.columns([1, 3, 1])
     
     with col_central:
-        st.image(logo, use_column_width=True)
+        st.image(logo, use_container_width=True)
     
     st.markdown("""
         </div>
