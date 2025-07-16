@@ -221,10 +221,7 @@ with st.sidebar:
 try:
     logo = Image.open("logo_demanda_dados.png")
     
-    st.markdown("""
-    <div class="logo-banner">
-        <div style="position: absolute; left: 30px; top: 50%; transform: translateY(-50%);">
-    """, unsafe_allow_html=True)
+    
     
     # Coluna para a logo
     col_esq, col_central, col_dir = st.columns([1, 3, 1])
