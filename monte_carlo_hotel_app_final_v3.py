@@ -586,7 +586,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.rect(pdf.get_x(), pdf.get_y(), pdf.w - 2*pdf.l_margin, 40, "F")
     pdf.set_text_color(44, 62, 80) # Dark blue text
     pdf.set_font("Times", "B", 14)
-    pdf.multi_cell(190, 8, "💻 Sistema Desenvolvido por Matheus Vianna", align="C")
+    pdf.multi_cell(190, 8, " Sistema Desenvolvido por Matheus Vianna", align="C")
     pdf.set_font("Times", "", 10)
     pdf.multi_cell(190, 6, "Engenheiro Especialista em Simulação Monte Carlo", align="C")
     pdf.multi_cell(190, 6, "Website: matheusvianna.com", align="C", link="https://matheusvianna.com")
