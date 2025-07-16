@@ -598,7 +598,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.set_font("Times", "B", 14)
     pdf.multi_cell(190, 10, "1. METODOLOGIA E FUNDAMENTOS TEÓRICOS", align="J")
     pdf.set_font("Times", "", 12)
-    pdf.multi_cell(100, 7, "A simulação Monte Carlo é uma técnica estatística que utiliza amostragem aleatória repetitiva para obter resultados numéricos de problemas complexos. No contexto deste estudo, a metodologia foi aplicada para modelar o comportamento estocástico da demanda elétrica em estabelecimentos hoteleiros, considerando a variabilidade natural do uso de equipamentos pelos hóspedes.", align="J")
+    pdf.multi_cell(10, 7, "A simulação Monte Carlo é uma técnica estatística que utiliza amostragem aleatória repetitiva para obter resultados numéricos de problemas complexos. No contexto deste estudo, a metodologia foi aplicada para modelar o comportamento estocástico da demanda elétrica em estabelecimentos hoteleiros, considerando a variabilidade natural do uso de equipamentos pelos hóspedes.", align="J")
     pdf.multi_cell(190, 7, f"O sistema implementado realiza {num_simulacoes:,} simulações independentes, cada uma representando um cenário possível de operação do hotel durante um período de {tempo_total // 60} horas. Esta abordagem permite capturar a incerteza inerente ao comportamento dos usuários e fornecer estatísticas robustas para o dimensionamento da infraestrutura elétrica.", align="J")
     pdf.ln(5)
     pdf.set_font("Times", "B", 12)
