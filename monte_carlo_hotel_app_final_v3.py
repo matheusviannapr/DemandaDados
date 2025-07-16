@@ -227,10 +227,10 @@ try:
     """, unsafe_allow_html=True)
     
     # Coluna para a logo
-    col_logo, col_spacer = st.columns([1, 3])
+    col_esq, col_central, col_dir = st.columns([1, 3, 1])
     
-    with col_logo:
-        st.image(logo, width=200)
+    with col_central:
+        st.image(logo, use_column_width=True)
     
     st.markdown("""
         </div>
