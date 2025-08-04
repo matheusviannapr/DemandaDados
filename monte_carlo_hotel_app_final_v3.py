@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 # Configuração da página
 st.set_page_config(
-    page_title="Simulação Monte Carlo - Hotel",
+    page_title="D² - Demanda e Dados",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
