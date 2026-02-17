@@ -1,9 +1,10 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import re, random
+import re
+import random
 from dataclasses import dataclass
-from typing import List, Tuple, Callable, Union
+from typing import Callable, List, Optional, Tuple, Union
 from packaging import version
 import copy
 import io
@@ -315,8 +316,9 @@ if version.parse(plt.matplotlib.__version__) >= version.parse("3.9"):
 else:
     boxplot_kw_global = {"labels": ["Picos do Hotel"]}
 
-# --- Tipos e Funções de Conversão de Horários ---
+# --- Núcleo de simulação ---
 IntervalType = Union[List[Tuple[int, int]], Callable[[], List[Tuple[int, int]]]]
+
 
 def parse_time(time_str: str) -> int:
     parts = time_str.strip().split(":")
@@ -327,6 +329,7 @@ def parse_time(time_str: str) -> int:
         hours = int(parts[0])
         minutes = int(parts[1])
     return hours * 60 + minutes
+
 
 def parse_intervalo_fixo(interval_str: str) -> List[Tuple[int, int]]:
     interval_str = interval_str.replace("às", "as")
@@ -341,36 +344,89 @@ def parse_intervalo_fixo(interval_str: str) -> List[Tuple[int, int]]:
         intervals.append((start, end))
     return intervals
 
+
+def _duracao_horas_para_passos(duracao_h: float, dt_min: int) -> int:
+    return max(1, int(round((duracao_h * 60) / dt_min)))
+
+
+def gerar_intervalo_uso(
+    janela_inicio: str,
+    janela_fim: str,
+    duracao_min_h: float,
+    duracao_max_h: float,
+    dt_min: int = 1,
+    probabilidade: float = 1.0,
+    seed: Optional[int] = None,
+    on_overflow: str = "clamp",
+) -> Optional[Tuple[int, int]]:
+    """
+    Retorna (inicio_idx, fim_idx) em passos discretos (não em minutos).
+
+    Regras implementadas:
+    - probabilidade é aplicada antes do sorteio de duração/início;
+    - duração é sorteada de forma uniforme contínua em horas;
+    - n_passos = round(duracao_h * 60 / dt_min);
+    - se duração não couber na janela: aplica clamp (reduz para caber) quando on_overflow='clamp'.
+    """
+    if dt_min <= 0:
+        raise ValueError("dt_min deve ser > 0")
+
+    rng = random.Random(seed) if seed is not None else random
+
+    if rng.random() > probabilidade:
+        return None
+
+    if duracao_min_h > duracao_max_h:
+        raise ValueError("duracao_min_h não pode ser maior que duracao_max_h")
+
+    janela_inicio_min = parse_time(janela_inicio)
+    janela_fim_min = parse_time(janela_fim)
+    if janela_fim_min <= janela_inicio_min:
+        raise ValueError("janela_fim deve ser maior que janela_inicio")
+
+    duracao_h = rng.uniform(duracao_min_h, duracao_max_h)
+    n_passos = _duracao_horas_para_passos(duracao_h, dt_min)
+
+    janela_inicio_idx = janela_inicio_min // dt_min
+    janela_fim_idx = janela_fim_min // dt_min
+    tamanho_janela_passos = janela_fim_idx - janela_inicio_idx
+
+    if n_passos > tamanho_janela_passos:
+        if on_overflow == "clamp":
+            n_passos = tamanho_janela_passos
+        else:
+            return None
+
+    latest_start = janela_fim_idx - n_passos
+    inicio_idx = rng.randint(janela_inicio_idx, latest_start)
+    fim_idx = inicio_idx + n_passos
+    return inicio_idx, fim_idx
+
+
 def parse_intervalo_dinamico_split(interval_str: str) -> Callable[[], List[Tuple[int, int]]]:
     """
-    Interpreta um intervalo dinâmico onde:
-      - A expressão é do tipo: "Início entre 10:30-14, duração 2"
-      - A duração total (por exemplo, 2 horas = 120 minutos) será dividida em 1 a 3 segmentos.
-      - Cada segmento será separado por um gap aleatório de até 30 minutos.
-    Retorna uma função que gera uma lista de intervalos (em minutos).
+    Compatibilidade com formato legado:
+      "Início entre 10:30-14:00, duração 2"
+    onde duração está em horas e é fragmentada em 1 a 3 segmentos.
     """
     parts = interval_str.split(";")
+
     def dynamic_intervals():
         intervals = []
         for part in parts:
             part = part.strip()
             m = re.search(r"(?i)entre\s*([\d:]+)\s*-\s*([\d:]+)", part)
-            m2 = re.search(r"(?i)duração\s*(\d+)", part)
+            m2 = re.search(r"(?i)duração\s*(\d+(?:[\.,]\d+)?)", part)
             if m and m2:
                 start_lower = parse_time(m.group(1))
                 start_upper = parse_time(m.group(2))
-                total_duration_minutes = int(m2.group(1)) * 60  # duração total em minutos
-                
-                # Decide o número de segmentos (entre 1 e 3)
+                total_duration_minutes = int(float(m2.group(1).replace(',', '.')) * 60)
+
                 num_segments = random.randint(1, 3)
-                
-                # Se a duração for muito curta, use apenas 1 segmento
                 if total_duration_minutes < 2:
                     segments = [total_duration_minutes]
                 else:
-                    # Disponíveis são os números de 1 até total_duration_minutes-1
                     available = total_duration_minutes - 1
-                    # Número de cortes não pode ser maior que o número de elementos disponíveis
                     num_cuts = min(num_segments - 1, available)
                     if num_cuts > 0:
                         cut_points = sorted(random.sample(range(1, total_duration_minutes), num_cuts))
@@ -382,21 +438,57 @@ def parse_intervalo_dinamico_split(interval_str: str) -> Callable[[], List[Tuple
                         segments.append(total_duration_minutes - previous)
                     else:
                         segments = [total_duration_minutes]
-                
-                # Escolhe o início do primeiro segmento aleatoriamente entre start_lower e start_upper.
+
                 first_start = random.randint(start_lower, start_upper)
-                seg_intervals = []
                 current_start = first_start
                 for seg_duration in segments:
-                    seg_intervals.append((current_start, current_start + seg_duration))
-                    # Gap aleatório entre 0 e 30 minutos antes do próximo segmento
-                    gap = random.randint(0, 30)
-                    current_start = current_start + seg_duration + gap
-                intervals.extend(seg_intervals)
+                    intervals.append((current_start, current_start + seg_duration))
+                    current_start = current_start + seg_duration + random.randint(0, 30)
         return intervals if intervals else [(0, 60)]
+
     return dynamic_intervals
 
-# --- Definição das Classes ---
+
+def parse_janela_operacao(intervalo_str: str) -> Tuple[int, int]:
+    intervalos = parse_intervalo_fixo(intervalo_str)
+    if not intervalos:
+        raise ValueError(
+            "Para duração intervalar, use intervalo no formato 'HH:MM as HH:MM' para janela de operação."
+        )
+    return intervalos[0]
+
+
+def criar_gerador_duracao_intervalar(
+    janela_inicio_min: int,
+    janela_fim_min: int,
+    duracao_min_h: float,
+    duracao_max_h: float,
+    dt_min: int = 1,
+    probabilidade: float = 1.0,
+    seed: Optional[int] = None,
+    on_overflow: str = "clamp",
+) -> Callable[[], List[Tuple[int, int]]]:
+    """Gera um único intervalo (em minutos) por execução, com duração aleatória em intervalo."""
+
+    def _generator() -> List[Tuple[int, int]]:
+        intervalo = gerar_intervalo_uso(
+            janela_inicio=f"{janela_inicio_min // 60:02d}:{janela_inicio_min % 60:02d}",
+            janela_fim=f"{janela_fim_min // 60:02d}:{janela_fim_min % 60:02d}",
+            duracao_min_h=duracao_min_h,
+            duracao_max_h=duracao_max_h,
+            dt_min=dt_min,
+            probabilidade=probabilidade,
+            seed=seed,
+            on_overflow=on_overflow,
+        )
+        if intervalo is None:
+            return []
+        inicio_idx, fim_idx = intervalo
+        return [(inicio_idx * dt_min, fim_idx * dt_min)]
+
+    return _generator
+
+
 @dataclass
 class Equipamento:
     nome: str
@@ -405,18 +497,20 @@ class Equipamento:
     intervalos: IntervalType
     probabilidade: float = 1.0
     fator_demanda: float = 1.0
+    probabilisticado_no_intervalo: bool = False
 
     def simula_carga(self, tempo_total: int = 1440):
         carga = np.zeros(tempo_total)
         intervals = self.intervalos() if callable(self.intervalos) else self.intervalos
-        if np.random.rand() < self.probabilidade:
-            # Aplicando o fator de demanda à potência
+
+        if self.probabilisticado_no_intervalo or np.random.rand() < self.probabilidade:
             potencia_efetiva = self.potencia * self.fator_demanda
             for inicio, fim in intervals:
                 inicio = max(0, inicio)
                 fim = min(tempo_total, fim)
                 carga[inicio:fim] += potencia_efetiva * self.quantidade
         return carga
+
 
 @dataclass
 class Comodo:
@@ -429,10 +523,23 @@ class Comodo:
             carga_total += eq.simula_carga(tempo_total)
         return carga_total
 
-# --- Funções para Criar Objetos a partir da Planilha ---
+
+def _get_duration_bounds_h(row: pd.Series) -> Tuple[Optional[float], Optional[float]]:
+    duracao_min = row.get("duracao_min")
+    duracao_max = row.get("duracao_max")
+    duracao_legacy = row.get("duracao")
+
+    if pd.notna(duracao_min) and pd.notna(duracao_max):
+        return float(duracao_min), float(duracao_max)
+    if pd.notna(duracao_legacy):
+        d = float(duracao_legacy)
+        return d, d
+    return None, None
+
+
 def cria_comodo_da_planilha(sheet_df: pd.DataFrame, comodo_nome: str) -> Comodo:
     equipamentos = []
-    for idx, row in sheet_df.iterrows():
+    for _, row in sheet_df.iterrows():
         nome = row["Equipamento"]
         potencia = float(row["Potência"])
         quantidade = int(row["Quantidade"])
@@ -440,111 +547,115 @@ def cria_comodo_da_planilha(sheet_df: pd.DataFrame, comodo_nome: str) -> Comodo:
         intervalo_str = str(row["intervalo"]).strip()
         probabilidade = float(row["probabilidade"])
         fd = float(row["FD"])
-        
+        modo_fixo = str(row.get("modo_fixo", "FIXO_100%")).strip().upper()
+
+        duracao_min_h, duracao_max_h = _get_duration_bounds_h(row)
+
+        probabilisticado_no_intervalo = False
+
         if tipo_intervalo == "fixo":
-            intervalos = parse_intervalo_fixo(intervalo_str)
+            if duracao_min_h is not None and modo_fixo == "FIXO_DURACAO_INTERVALAR":
+                inicio, fim = parse_janela_operacao(intervalo_str)
+                intervalos = criar_gerador_duracao_intervalar(
+                    janela_inicio_min=inicio,
+                    janela_fim_min=fim,
+                    duracao_min_h=duracao_min_h,
+                    duracao_max_h=duracao_max_h,
+                    probabilidade=probabilidade,
+                    dt_min=1,
+                    on_overflow="clamp",
+                )
+                probabilisticado_no_intervalo = True
+            else:
+                intervalos = parse_intervalo_fixo(intervalo_str)
         elif tipo_intervalo == "dinâmico":
-            # Utiliza a nova função que fragmenta a duração com gap de até 30 minutos
-            intervalos = parse_intervalo_dinamico_split(intervalo_str)
+            if duracao_min_h is not None:
+                inicio, fim = parse_janela_operacao(intervalo_str)
+                intervalos = criar_gerador_duracao_intervalar(
+                    janela_inicio_min=inicio,
+                    janela_fim_min=fim,
+                    duracao_min_h=duracao_min_h,
+                    duracao_max_h=duracao_max_h,
+                    probabilidade=probabilidade,
+                    dt_min=1,
+                    on_overflow="clamp",
+                )
+                probabilisticado_no_intervalo = True
+            else:
+                intervalos = parse_intervalo_dinamico_split(intervalo_str)
         else:
             intervalos = parse_intervalo_fixo(intervalo_str)
-        
+
         eq = Equipamento(
             nome=nome,
             potencia=potencia,
             quantidade=quantidade,
             intervalos=intervalos,
             probabilidade=probabilidade,
-            fator_demanda=fd
+            fator_demanda=fd,
+            probabilisticado_no_intervalo=probabilisticado_no_intervalo,
         )
         equipamentos.append(eq)
     return Comodo(nome=comodo_nome, equipamentos=equipamentos)
 
+
 def cria_comodos_do_excel(uploaded_file) -> List[Comodo]:
     sheets = pd.read_excel(uploaded_file, sheet_name=None)
-    comodos = []
-    for sheet_name, df in sheets.items():
-        comodo = cria_comodo_da_planilha(df, sheet_name)
-        comodos.append(comodo)
-    return comodos
+    return [cria_comodo_da_planilha(df, sheet_name) for sheet_name, df in sheets.items()]
+
 
 def cria_comodos_do_dataframe(df_dict: dict) -> List[Comodo]:
-    """Cria cômodos a partir de um dicionário de DataFrames"""
     comodos = []
     for comodo_nome, df in df_dict.items():
         if not df.empty:
-            comodo = cria_comodo_da_planilha(df, comodo_nome)
-            comodos.append(comodo)
+            comodos.append(cria_comodo_da_planilha(df, comodo_nome))
     return comodos
 
+
 def cria_comodos_individualizados(comodos: List[Comodo], instancias_por_comodo: dict) -> List[Comodo]:
-    """
-    Cria instâncias individualizadas de cada cômodo, com identificadores únicos.
-    Por exemplo, se tivermos 3 instâncias de "Quarto 1", serão criados:
-    "Quarto 1.1", "Quarto 1.2" e "Quarto 1.3", cada um com seu próprio comportamento aleatório.
-    """
     comodos_individualizados = []
-    
     for comodo in comodos:
         qtd = instancias_por_comodo.get(comodo.nome, 1)
-        
         for i in range(qtd):
-            # Cria uma cópia profunda dos equipamentos para cada instância individualizada
             equipamentos_copia = []
             for eq in comodo.equipamentos:
-                # Cria uma cópia do equipamento com os mesmos parâmetros
-                # mas potencialmente com comportamento aleatório diferente
-                eq_copia = Equipamento(
-                    nome=eq.nome,
-                    potencia=eq.potencia,
-                    quantidade=eq.quantidade,
-                    intervalos=eq.intervalos,  # Isso manterá a mesma função geradora, mas com resultados aleatórios diferentes
-                    probabilidade=eq.probabilidade,
-                    fator_demanda=eq.fator_demanda
+                equipamentos_copia.append(
+                    Equipamento(
+                        nome=eq.nome,
+                        potencia=eq.potencia,
+                        quantidade=eq.quantidade,
+                        intervalos=eq.intervalos,
+                        probabilidade=eq.probabilidade,
+                        fator_demanda=eq.fator_demanda,
+                        probabilisticado_no_intervalo=eq.probabilisticado_no_intervalo,
+                    )
                 )
-                equipamentos_copia.append(eq_copia)
-            
-            # Cria um novo cômodo com nome individualizado (ex: "Quarto 1.3")
-            nome_individualizado = f"{comodo.nome}.{i+1}"
-            comodo_individualizado = Comodo(nome=nome_individualizado, equipamentos=equipamentos_copia)
-            comodos_individualizados.append(comodo_individualizado)
-    
+            comodos_individualizados.append(Comodo(nome=f"{comodo.nome}.{i+1}", equipamentos=equipamentos_copia))
     return comodos_individualizados
 
-def simula_carga_total(comodos: List[Comodo],
-                       instancias_por_comodo: dict,
-                       num_simulacoes: int = 1000,
-                       tempo_total: int = 1440) -> (np.ndarray, np.ndarray, np.ndarray):
-    """
-    Executa as simulações e retorna:
-      - picos: array com os picos de carga de cada simulação.
-      - perfis: array 2D com os perfis de carga (cada linha é uma simulação).
-      - consumos_diarios: array com o consumo diário (kWh) de cada simulação.
-      
-    Nota: Esta versão cria instâncias individualizadas de cada cômodo,
-    garantindo que cada instância tenha seu próprio comportamento aleatório.
-    """
+
+def simula_carga_total(
+    comodos: List[Comodo],
+    instancias_por_comodo: dict,
+    num_simulacoes: int = 1000,
+    tempo_total: int = 1440,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     picos = []
     perfis = []
     consumos_diarios = []
-    
-    # Cria instâncias individualizadas de cada cômodo
     comodos_individualizados = cria_comodos_individualizados(comodos, instancias_por_comodo)
-    
+
     for _ in range(num_simulacoes):
         load_total = np.zeros(tempo_total)
-        
-        # Simula cada cômodo individualizado
         for comodo in comodos_individualizados:
-            carga_instancia = comodo.simula_carga(tempo_total)
-            load_total += carga_instancia
-        
+            load_total += comodo.simula_carga(tempo_total)
+
         picos.append(np.max(load_total))
         perfis.append(load_total)
-        consumo = np.sum(load_total) / 1000 / 60  # conversão para kWh/dia
-        consumos_diarios.append(consumo)
-    
+        consumos_diarios.append(np.sum(load_total) / 1000 / 60)
+
     return np.array(picos), np.array(perfis), np.array(consumos_diarios)
+
 
 # Função para salvar gráficos como imagens
 def salvar_grafico(fig, nome_arquivo):
@@ -569,7 +680,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     # Ajustando a largura da célula para o título secundário
     pdf.multi_cell(190, 8, "Análise de Carga Elétrica para Dimensionamento de Infraestrutura Hoteleira", align="C")
     pdf.ln(5)
-    pdf.multi_cell(190, 6, f"Data de geração: {datetime.now().strftime("%d/%m/%Y às %H:%M")}", align="C")
+    pdf.multi_cell(190, 6, f"Data de geração: {datetime.now().strftime('%d/%m/%Y às %H:%M')}", align="C")
     pdf.multi_cell(190, 6, "Sistema: Simulação Monte Carlo com Instâncias Individualizadas", align="C")
     pdf.ln(10)
 
@@ -744,8 +855,8 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
                     str(row["Quantidade"]),
                     str(row["Tipo de intervalo"]).title(),
                     str(row["intervalo"]),
-                    f"{row["probabilidade"] * 100:.1f}%",
-                    f"{row["FD"]:.2f}"
+                    f"{row['probabilidade'] * 100:.1f}%",
+                    f"{row['FD']:.2f}"
                 ])
             
             # Calculate column widths for equipment table
@@ -891,7 +1002,7 @@ if entrada_dados == "📁 Upload de arquivo Excel":
     uploaded_file = st.file_uploader(
         "Carregar arquivo Excel com dados dos cômodos",
         type=["xlsx", "xls"],
-        help="O arquivo deve conter abas com os nomes dos cômodos e colunas: Equipamento, Potência, Quantidade, Tipo de intervalo, intervalo, probabilidade, FD"
+        help="O arquivo deve conter abas com os nomes dos cômodos e colunas: Equipamento, Potência, Quantidade, Tipo de intervalo, intervalo, probabilidade, FD (+ duracao_min/duracao_max opcionais)"
     )
     
     if uploaded_file is not None:
@@ -1014,16 +1125,48 @@ else:  # Entrada direta de dados
                         step=0.1,
                         key=f"fd_{i}_{j}"
                     )
+
+                    duracao_min = st.number_input(
+                        "Duração mínima (h, opcional):",
+                        min_value=0.0,
+                        max_value=24.0,
+                        value=0.0,
+                        step=0.5,
+                        key=f"dur_min_{i}_{j}",
+                        help="Se >0, ativa duração intervalar com janela definida em 'intervalo'."
+                    )
+                    duracao_max = st.number_input(
+                        "Duração máxima (h, opcional):",
+                        min_value=0.0,
+                        max_value=24.0,
+                        value=0.0,
+                        step=0.5,
+                        key=f"dur_max_{i}_{j}"
+                    )
+
+                    modo_fixo = "FIXO_100%"
+                    if tipo_intervalo == "fixo":
+                        modo_fixo = st.selectbox(
+                            "Modo fixo:",
+                            ["FIXO_100%", "FIXO_DURACAO_INTERVALAR"],
+                            key=f"modo_fixo_{i}_{j}",
+                        )
                 
-                equipamentos_data.append({
+                row = {
                     "Equipamento": nome_eq,
                     "Potência": potencia,
                     "Quantidade": quantidade,
                     "Tipo de intervalo": tipo_intervalo,
                     "intervalo": intervalo,
                     "probabilidade": probabilidade,
-                    "FD": fd
-                })
+                    "FD": fd,
+                }
+                if duracao_min > 0 and duracao_max > 0:
+                    row["duracao_min"] = duracao_min
+                    row["duracao_max"] = duracao_max
+                if tipo_intervalo == "fixo":
+                    row["modo_fixo"] = modo_fixo
+                equipamentos_data.append(row)
             
             # Armazena os dados do cômodo
             st.session_state.comodos_data[comodo_nome] = pd.DataFrame(equipamentos_data)
@@ -1392,9 +1535,12 @@ else:
             'Potência': [2000, 100, 150],
             'Quantidade': [1, 4, 1],
             'Tipo de intervalo': ['dinâmico', 'fixo', 'fixo'],
-            'intervalo': ['Início entre 14:00-18:00, duração 6', '18:00 as 23:00', '19:00 as 23:00'],
+            'intervalo': ['07:00 as 22:00', '18:00 as 23:00', '19:00 as 23:00'],
             'probabilidade': [0.8, 1.0, 0.9],
-            'FD': [0.8, 1.0, 1.0]
+            'FD': [0.8, 1.0, 1.0],
+            'duracao_min': [1.0, np.nan, np.nan],
+            'duracao_max': [3.0, np.nan, np.nan],
+            'modo_fixo': [np.nan, 'FIXO_100%', 'FIXO_DURACAO_INTERVALAR']
         })
         
         st.dataframe(exemplo_df)
@@ -1403,11 +1549,13 @@ else:
         **Instruções:**
         - Cada aba do Excel deve representar um tipo de cômodo (ex: "Quarto 1", "Quarto 3", etc.)
         - As colunas obrigatórias são: Equipamento, Potência, Quantidade, Tipo de intervalo, intervalo, probabilidade, FD
+        - Colunas opcionais para duração intervalar: **duracao_min** e **duracao_max** (em horas).
+        - Compatibilidade: se usar apenas **duracao** (legado), o sistema mapeia para min=max.
+        - Para tipo **fixo**, a coluna opcional **modo_fixo** aceita: `FIXO_100%` ou `FIXO_DURACAO_INTERVALAR`.
         - **Tipo de intervalo**: "fixo" ou "dinâmico"
-        - **intervalo**: Para fixo use formato "HH:MM as HH:MM", para dinâmico use "Início entre HH:MM-HH:MM, duração X"
+        - **intervalo**: para duração intervalar use janela no formato "HH:MM as HH:MM".
         - **probabilidade**: Valor entre 0 e 1 (probabilidade do equipamento estar ligado)
         - **FD**: Fator de demanda (valor entre 0 e 1)
         """)
     else:
         st.info("👆 Por favor, configure os dados dos cômodos acima e clique em 'Processar Dados Inseridos'.")
-
