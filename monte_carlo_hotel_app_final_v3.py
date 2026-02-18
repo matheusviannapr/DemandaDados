@@ -766,8 +766,8 @@ def escapar_latex(texto):
     return "".join(substituicoes.get(c, c) for c in str(texto))
 
 
-def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes, tempo_total, imagens_graficos):
-    """Gera um arquivo ZIP com relatório em LaTeX e todas as imagens dos gráficos."""
+def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes, tempo_total, imagens_graficos, comodos_config_data=None, comodos_originais=None):
+    """Gera um arquivo ZIP com relatório LaTeX técnico completo e imagens dos gráficos."""
     picos = resultados["picos"]
     perfis = resultados["perfis"]
     consumos = resultados["consumos"]
@@ -776,81 +776,203 @@ def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes,
     pico_max = np.max(picos)
     pico_min = np.min(picos)
     pico_95 = np.percentile(picos, 95)
+    desvio_padrao = np.std(picos)
+    coef_variacao = (desvio_padrao / pico_medio) * 100 if pico_medio > 0 else 0
     consumo_medio = np.mean(consumos)
+
+    media_por_minuto = np.mean(perfis, axis=0)
+    fator_carga_medio = (np.mean(media_por_minuto) / np.max(media_por_minuto)) * 100 if np.max(media_por_minuto) > 0 else 0
+    ic_inferior = np.percentile(picos, 2.5)
+    ic_superior = np.percentile(picos, 97.5)
+    capacidade_recomendada = pico_95 * 1.2
+
+    total_potencia_instalada_comodos = 0
+    if comodos_originais:
+        for comodo_obj in comodos_originais:
+            total_potencia_instalada_comodos += sum(eq.potencia * eq.quantidade for eq in comodo_obj.equipamentos) * instancias_por_comodo.get(comodo_obj.nome, 1)
+
+    fator_diversidade = pico_medio / total_potencia_instalada_comodos if total_potencia_instalada_comodos > 0 else 0
+
+    if coef_variacao < 15:
+        interpretacao_diversidade = "baixa variabilidade, comportamento previsível e estável"
+    elif coef_variacao < 30:
+        interpretacao_diversidade = "variabilidade moderada, comportamento típico para instalações hoteleiras"
+    else:
+        interpretacao_diversidade = "alta variabilidade, requer monitoramento e análise adicional"
+
+    if fator_carga_medio > 70:
+        interpretacao_fator_carga = "excelente utilização da infraestrutura instalada"
+    elif fator_carga_medio > 50:
+        interpretacao_fator_carga = "boa utilização da infraestrutura"
+    else:
+        interpretacao_fator_carga = "utilização baixa, com grande diferença entre carga média e pico"
 
     secoes_graficos = []
     for idx, imagem in enumerate(imagens_graficos, start=1):
         nome_arquivo = os.path.basename(imagem["caminho"])
-        secoes_graficos.append(
-            f"""
-\\subsection*{{Figura {idx}: {escapar_latex(imagem['titulo'])}}}
-\\begin{{figure}}[H]
-    \\centering
-    \\includegraphics[width=0.92\\textwidth]{{images/{nome_arquivo}}}
-    \\caption{{{escapar_latex(imagem['titulo'])}}}
-\\end{{figure}}
+        secoes_graficos.append(fr"""
+\subsection*{{Figura {idx}: {escapar_latex(imagem['titulo'])}}}
+\begin{{figure}}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{{images/{nome_arquivo}}}
+    \caption{{{escapar_latex(imagem['titulo'])}}}
+\end{{figure}}
 
-{escapar_latex(imagem['descricao'])}
-"""
-        )
+\textbf{{Análise Técnica:}} {escapar_latex(imagem['descricao'])}
+""")
 
     linhas_instancias = "\n".join(
         f"\\item {escapar_latex(nome)}: {quantidade} instância(s)"
         for nome, quantidade in instancias_por_comodo.items()
     )
 
-    conteudo_tex = f"""\\documentclass[12pt,a4paper]{{article}}
-\\usepackage[utf8]{{inputenc}}
-\\usepackage[T1]{{fontenc}}
-\\usepackage[brazil]{{babel}}
-\\usepackage{{lmodern}}
-\\usepackage{{geometry}}
-\\usepackage{{graphicx}}
-\\usepackage{{float}}
-\\usepackage{{booktabs}}
-\\geometry{{margin=2.5cm}}
+    configuracao_comodos = ""
+    if comodos_originais:
+        blocos = []
+        for comodo in comodos_originais:
+            pot_instalada = sum(eq.potencia * eq.quantidade for eq in comodo.equipamentos)
+            linhas_eq = []
+            for eq in comodo.equipamentos:
+                intervalos = "; ".join([f"[{ini}-{fim}]" for ini, fim in eq.intervalos])
+                linhas_eq.append(
+                    f"{escapar_latex(eq.nome)} & {eq.potencia:.1f} & {eq.quantidade} & {eq.probabilidade:.2f} & {eq.fator_demanda:.2f} & {escapar_latex(intervalos)} \\\\" 
+                )
+            tabela_eq = "\n".join(linhas_eq) if linhas_eq else "Sem equipamentos cadastrados."
+            blocos.append(fr"""
+\subsection*{{{escapar_latex(comodo.nome)}}}
+Instâncias deste tipo de cômodo: {instancias_por_comodo.get(comodo.nome, 1)}. Potência instalada por unidade: {pot_instalada:.1f} W.
 
-\\title{{Relatório Técnico de Simulação Monte Carlo}}
-\\author{{D² - Demanda e Dados}}
-\\date{{{datetime.now().strftime('%d/%m/%Y %H:%M')}}}
+\begin{{longtable}}{{p{{4.2cm}}rrrrp{{4.2cm}}}}
+\toprule
+Equipamento & Potência (W) & Qtde & Prob. & Fator Demanda & Intervalos \\
+\midrule
+{tabela_eq}
+\bottomrule
+\end{{longtable}}
+""")
+        configuracao_comodos = "\n".join(blocos)
 
-\\begin{{document}}
-\\maketitle
+    configuracao_manual = ""
+    if comodos_config_data:
+        blocos_man = [r"\subsection*{Configuração Detalhada (Entrada Manual)}"]
+        for comodo_nome, equipamentos_df_list in comodos_config_data.items():
+            blocos_man.append(f"\\paragraph{{{escapar_latex(comodo_nome)}}}")
+            for df in equipamentos_df_list:
+                if not df.empty:
+                    for _, row in df.iterrows():
+                        blocos_man.append(
+                            "\\begin{itemize}"
+                            + f"\\item Equipamento: {escapar_latex(row.get('nome', 'N/A'))}"
+                            + f"\\item Potência: {escapar_latex(row.get('potencia', 'N/A'))} W"
+                            + f"\\item Quantidade: {escapar_latex(row.get('quantidade', 'N/A'))}"
+                            + f"\\item Intervalos: {escapar_latex(row.get('intervalos', 'N/A'))}"
+                            + f"\\item Probabilidade: {escapar_latex(row.get('probabilidade', 'N/A'))}"
+                            + f"\\item Fator de Demanda: {escapar_latex(row.get('fator_demanda', 'N/A'))}"
+                            + "\\end{itemize}"
+                        )
+        configuracao_manual = "\n".join(blocos_man)
 
-\\section*{{Resumo Executivo}}
-Este relatório apresenta os resultados da simulação Monte Carlo para análise de demanda elétrica em hotelaria.
+    conteudo_tex = fr"""\documentclass[12pt,a4paper]{{article}}
+\usepackage[utf8]{{inputenc}}
+\usepackage[T1]{{fontenc}}
+\usepackage[brazil]{{babel}}
+\usepackage{{lmodern}}
+\usepackage{{geometry}}
+\usepackage{{graphicx}}
+\usepackage{{float}}
+\usepackage{{booktabs}}
+\usepackage{{longtable}}
+\usepackage{{array}}
+\geometry{{margin=2.5cm}}
 
-\\section*{{Parâmetros da Simulação}}
-\\begin{{itemize}}
-    \\item Número de simulações: {num_simulacoes}
-    \\item Horizonte temporal por simulação: {tempo_total} minutos
-    \\item Consumo médio diário: {consumo_medio:.2f} kWh
-\\end{{itemize}}
+\title{{RELATÓRIO TÉCNICO DE SIMULAÇÃO MONTE CARLO\\Análise de Carga Elétrica para Dimensionamento de Infraestrutura Hoteleira}}
+\author{{Sistema Desenvolvido por Matheus Vianna\\Engenheiro Especialista em Simulação Monte Carlo}}
+\date{{Gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')}}}
 
-\\subsection*{{Instâncias por Cômodo}}
-\\begin{{itemize}}
+\begin{{document}}
+\maketitle
+
+\section*{{1. Metodologia e Fundamentos Teóricos}}
+A simulação Monte Carlo é uma técnica estatística que utiliza amostragem aleatória repetitiva para obter resultados numéricos de problemas complexos. No contexto deste estudo, a metodologia foi aplicada para modelar o comportamento estocástico da demanda elétrica em estabelecimentos hoteleiros, considerando a variabilidade natural do uso de equipamentos pelos hóspedes.
+
+O sistema implementado realiza {num_simulacoes:,} simulações independentes, cada uma representando um cenário possível de operação do hotel durante um período de {tempo_total // 60} horas. Esta abordagem permite capturar a incerteza inerente ao comportamento dos usuários e fornecer estatísticas robustas para o dimensionamento da infraestrutura elétrica.
+
+\subsection*{{1.1 Modelagem de Instâncias Individualizadas}}
+Uma característica fundamental desta simulação é o tratamento individualizado de cada unidade habitacional. Quando o hotel possui múltiplas unidades do mesmo tipo, cada uma é modelada como uma entidade independente com seu próprio comportamento aleatório. Esta abordagem é crucial para capturar adequadamente o fator de diversidade.
+
+\subsection*{{1.2 Parâmetros de Entrada e Configuração}}
+\begin{{itemize}}
+    \item Número total de simulações realizadas: {num_simulacoes:,}
+    \item Período de análise por simulação: {tempo_total} minutos ({tempo_total // 60} horas)
+    \item Resolução temporal: 1 minuto
+    \item Método de amostragem: pseudo-aleatório com distribuições específicas por equipamento
+\end{{itemize}}
+
+\section*{{2. Configuração do Sistema Simulado}}
+\subsection*{{2.1 Instâncias por Cômodo}}
+\begin{{itemize}}
 {linhas_instancias}
-\\end{{itemize}}
+\end{{itemize}}
 
-\\section*{{Indicadores Estatísticos}}
-\\begin{{table}}[H]
-    \\centering
-    \\begin{{tabular}}{{lr}}
-        \\toprule
-        Métrica & Valor \\\\
-        \\midrule
-        Pico médio & {pico_medio:.2f} W \\\\
-        Pico máximo & {pico_max:.2f} W \\\\
-        Pico mínimo & {pico_min:.2f} W \\\\
-        Percentil 95 (P95) & {pico_95:.2f} W \\\\
-        \\bottomrule
-    \\end{{tabular}}
-\\end{{table}}
+\subsection*{{2.2 Potência Instalada e Caracterização por Cômodo}}
+{configuracao_comodos if configuracao_comodos else 'Configuração detalhada por cômodo não disponível nesta execução.'}
 
-\\section*{{Gráficos da Simulação}}
+{configuracao_manual}
+
+\section*{{3. Resultados Consolidados da Simulação}}
+\begin{{table}}[H]
+    \centering
+    \begin{{tabular}}{{lr}}
+        \toprule
+        Métrica & Valor \\
+        \midrule
+        Pico médio & {pico_medio:.2f} W \\
+        Pico máximo & {pico_max:.2f} W \\
+        Pico mínimo & {pico_min:.2f} W \\
+        Percentil 95 (P95) & {pico_95:.2f} W \\
+        Consumo médio diário & {consumo_medio:.2f} kWh \\
+        \bottomrule
+    \end{{tabular}}
+\end{{table}}
+
+\section*{{4. Análise Gráfica da Demanda}}
+Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da demanda elétrica do estabelecimento, permitindo uma compreensão abrangente dos padrões de consumo e suas implicações para o dimensionamento da infraestrutura.
 {''.join(secoes_graficos)}
 
-\\end{{document}}
+\section*{{5. Análise Estatística Avançada}}
+\begin{{itemize}}
+    \item Desvio padrão dos picos: {desvio_padrao:.2f} W
+    \item Coeficiente de variação: {coef_variacao:.2f}\% ({escapar_latex(interpretacao_diversidade)})
+    \item Intervalo de confiança (95\%): {ic_inferior:.2f} W a {ic_superior:.2f} W
+    \item Amplitude de variação: {(pico_max - pico_min):.2f} W
+    \item Fator de carga médio: {fator_carga_medio:.2f}\% ({escapar_latex(interpretacao_fator_carga)})
+    \item Fator de diversidade: {fator_diversidade:.4f}
+    \item Densidade de carga: {(pico_medio / sum(instancias_por_comodo.values())):.2f} W/unidade
+\end{{itemize}}
+
+\section*{{6. Recomendações Técnicas para Dimensionamento}}
+\begin{{itemize}}
+    \item Capacidade recomendada para transformadores: {capacidade_recomendada:.0f} W (P95 + 20\% de margem de segurança).
+    \item Dimensionamento de condutores: considerar fatores de correção por temperatura e agrupamento conforme NBR 5410.
+    \item Sistemas de proteção: ajustes baseados no P95 com coordenação seletiva para garantir continuidade do serviço.
+    \item Fator de demanda global de referência: {(pico_95 / (pico_medio * 1.2)):.4f}.
+\end{{itemize}}
+
+\section*{{7. Conclusões e Considerações Finais}}
+A simulação Monte Carlo realizada com {num_simulacoes:,} cenários independentes fornece uma base estatisticamente robusta para o dimensionamento da infraestrutura elétrica do estabelecimento hoteleiro. A metodologia de instâncias individualizadas permite capturar adequadamente o fator de diversidade, resultando em dimensionamentos mais precisos e economicamente otimizados.
+
+Os resultados apresentados baseiam-se nas configurações de equipamentos e padrões de uso fornecidos. Mudanças significativas no perfil de ocupação, introdução de novos tipos de equipamentos ou alterações nos hábitos dos usuários podem impactar os resultados e requerem reavaliação da simulação.
+
+A capacidade recomendada de {capacidade_recomendada:.0f} W oferece um equilíbrio adequado entre confiabilidade operacional e viabilidade econômica. Recomenda-se implementar monitoramento contínuo para validação dos resultados e refinamento progressivo dos modelos de simulação.
+
+\vspace{{1em}}
+\begin{{center}}
+Relatório Técnico Gerado Automaticamente\\
+Sistema: Simulação Monte Carlo com Instâncias Individualizadas\\
+Desenvolvido por Matheus Vianna --- matheusvianna.com
+\end{{center}}
+
+\end{{document}}
 """
 
     zip_buffer = io.BytesIO()
@@ -865,6 +987,7 @@ Este relatório apresenta os resultados da simulação Monte Carlo para análise
 
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
+
 
 # Função para gerar PDF com os resultados (versão aprimorada com FPDF2)
 def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo_total, imagens_graficos=None, comodos_config_data=None, comodos_originais=None):
@@ -1527,7 +1650,9 @@ if "comodos" in st.session_state and st.session_state.comodos:
                         instancias_por_comodo,
                         num_simulacoes,
                         tempo_total,
-                        imagens_graficos
+                        imagens_graficos,
+                        st.session_state.comodos_data if st.session_state.data_source == "manual" else None,
+                        st.session_state.comodos
                     )
 
                     st.download_button(
