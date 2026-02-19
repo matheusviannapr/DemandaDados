@@ -684,7 +684,22 @@ def gerar_graficos_relatorio(picos, perfis, pico_medio, pico_95, tempo_total, nu
     imagens_graficos.append({"titulo": "Distribuição dos Picos de Carga", "caminho": caminho_img, "descricao": "Este histograma apresenta a distribuição estatística dos picos de demanda elétrica obtidos através das simulações Monte Carlo. A análise da forma da distribuição fornece insights sobre a previsibilidade do comportamento da carga: distribuições mais concentradas (baixo desvio padrão) indicam comportamento mais previsível, enquanto distribuições mais dispersas sugerem maior variabilidade operacional. A linha vermelha tracejada representa a demanda média máxima esperada, enquanto a linha verde indica o percentil 95 (P95), valor amplamente utilizado na engenharia elétrica como referência para dimensionamento de transformadores e sistemas de proteção, pois garante que 95% dos cenários simulados apresentem demanda inferior a este valor."})
     plt.close(fig)
 
-    # 2. Curva de duração de carga
+    # 2. Probabilidade de excedência dos picos
+    picos_sorted = np.sort(picos)
+    prob_excedencia = 1 - (np.arange(1, len(picos_sorted) + 1) / len(picos_sorted))
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(picos_sorted, prob_excedencia * 100, label="Probabilidade de Excedência", linewidth=2, color="#e74c3c")
+    ax.set_title("Probabilidade de Excedência dos Picos Diários")
+    ax.set_xlabel("Pico de Carga (W)")
+    ax.set_ylabel("Probabilidade de Excedência (%)")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    caminho_img = salvar_grafico(fig, "probabilidade_excedencia_picos")
+    imagens_graficos.append({"titulo": "Probabilidade de Excedência dos Picos Diários", "caminho": caminho_img, "descricao": "Este gráfico de excedência apresenta, para cada valor de pico de demanda, a probabilidade de ocorrência de valores superiores. É uma ferramenta essencial para análise de risco elétrico, permitindo avaliar a frequência esperada de eventos críticos de sobrecarga e apoiar decisões de dimensionamento com base em critérios probabilísticos."})
+    plt.close(fig)
+
+    # 3. Curva de duração de carga
     todas_cargas = np.concatenate(perfis)
     todas_cargas_sorted = np.sort(todas_cargas)[::-1]
     frac_tempo = np.arange(1, len(todas_cargas_sorted) + 1) / len(todas_cargas_sorted)
@@ -700,7 +715,7 @@ def gerar_graficos_relatorio(picos, perfis, pico_medio, pico_95, tempo_total, nu
     imagens_graficos.append({"titulo": "Curva de Duração de Carga", "caminho": caminho_img, "descricao": "A Curva de Duração de Carga (CDC) é uma ferramenta fundamental para análise energética que apresenta os valores de demanda em ordem decrescente de magnitude, revelando por quanto tempo cada nível de carga é mantido ou excedido durante o período analisado. Esta curva é essencial para estudos de viabilidade econômica de sistemas de geração distribuída, dimensionamento de sistemas de armazenamento de energia e análise de contratos de fornecimento com tarifação diferenciada por horário. A inclinação da curva indica a variabilidade da demanda: curvas mais íngremes sugerem grandes variações entre picos e vales de consumo, enquanto curvas mais suaves indicam demanda mais constante ao longo do tempo."})
     plt.close(fig)
 
-    # 3. Perfil de carga médio
+    # 4. Perfil de carga médio
     tempo = np.arange(tempo_total) / 60.0
     perfil_medio = np.mean(perfis, axis=0)
 
@@ -714,7 +729,30 @@ def gerar_graficos_relatorio(picos, perfis, pico_medio, pico_95, tempo_total, nu
     imagens_graficos.append({"titulo": "Perfil Médio de Carga ao Longo do Dia", "caminho": caminho_img, "descricao": "O perfil médio de carga representa a demanda elétrica média esperada para cada minuto do dia, calculada a partir da média de todas as simulações realizadas. Este gráfico é fundamental para o planejamento operacional do sistema elétrico, permitindo identificar os horários de maior e menor demanda, que são cruciais para estratégias de gestão energética e otimização de custos. Os picos de demanda geralmente coincidem com períodos de maior atividade dos hóspedes, como check-in/check-out, horários de refeições e períodos noturnos. A análise deste perfil também orienta decisões sobre implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
     plt.close(fig)
 
-    # 4. Gráfico de potência cumulativa por cômodo
+    # 5. Fator de carga por hora do dia
+    pico_por_minuto = np.max(perfis, axis=0)
+    fator_carga_por_hora = []
+    total_horas = max(1, tempo_total // 60)
+    for h in range(total_horas):
+        inicio = h * 60
+        fim = min(inicio + 60, tempo_total)
+        carga_media_h = np.mean(perfil_medio[inicio:fim])
+        pico_h = np.max(pico_por_minuto[inicio:fim])
+        fator = carga_media_h / pico_h if pico_h > 0 else 0
+        fator_carga_por_hora.append(fator)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(np.arange(total_horas), fator_carga_por_hora, color="#f39c12", alpha=0.8)
+    ax.set_xlabel("Hora do Dia")
+    ax.set_ylabel("Fator de Carga")
+    ax.set_title("Fator de Carga por Hora do Dia")
+    ax.set_xticks(np.arange(total_horas))
+    ax.grid(True, axis="y", linestyle="--", alpha=0.7)
+    caminho_img = salvar_grafico(fig, "fator_carga_por_hora")
+    imagens_graficos.append({"titulo": "Fator de Carga por Hora do Dia", "caminho": caminho_img, "descricao": "O fator de carga horário expressa a razão entre a carga média e a carga máxima em cada hora, indicando o grau de aproveitamento da capacidade elétrica instalada ao longo do dia. Valores elevados refletem uso mais uniforme da infraestrutura, enquanto valores baixos evidenciam maiores oscilações e concentração de demanda em picos."})
+    plt.close(fig)
+
+    # 6. Gráfico de potência cumulativa por cômodo
     comodos_cargas_medias = {}
     for comodo_obj in comodos:
         comodo_copia = copy.deepcopy(comodo_obj)
