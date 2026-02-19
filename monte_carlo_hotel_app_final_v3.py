@@ -14,6 +14,7 @@ from fpdf import FPDF
 from PIL import Image
 import os
 import matplotlib.pyplot as plt
+import zipfile
 
 # Configuração da página
 st.set_page_config(
@@ -664,6 +665,390 @@ def salvar_grafico(fig, nome_arquivo):
     fig.savefig(caminho, dpi=300, bbox_inches="tight", facecolor="white")
     return caminho
 
+
+def gerar_graficos_relatorio(picos, perfis, pico_medio, pico_95, tempo_total, num_simulacoes, comodos, instancias_por_comodo):
+    """Gera os gráficos utilizados nos relatórios e retorna metadados com os caminhos."""
+    imagens_graficos = []
+
+    # 1. Distribuição dos picos
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.hist(picos, bins=30, alpha=0.7, edgecolor="black", density=True)
+    ax.axvline(pico_medio, color="red", linestyle="dashed", linewidth=2, label=f"Média: {pico_medio:.0f} W")
+    ax.axvline(pico_95, color="green", linestyle="dashed", linewidth=2, label=f"P95: {pico_95:.0f} W")
+    ax.set_title("Distribuição dos Picos de Carga")
+    ax.set_xlabel("Pico de Carga (W)")
+    ax.set_ylabel("Frequência Normalizada")
+    ax.legend()
+    ax.grid(True)
+    caminho_img = salvar_grafico(fig, "distribuicao_picos")
+    imagens_graficos.append({"titulo": "Distribuição dos Picos de Carga", "caminho": caminho_img, "descricao": "Este histograma apresenta a distribuição estatística dos picos de demanda elétrica obtidos através das simulações Monte Carlo. A análise da forma da distribuição fornece insights sobre a previsibilidade do comportamento da carga: distribuições mais concentradas (baixo desvio padrão) indicam comportamento mais previsível, enquanto distribuições mais dispersas sugerem maior variabilidade operacional. A linha vermelha tracejada representa a demanda média máxima esperada, enquanto a linha verde indica o percentil 95 (P95), valor amplamente utilizado na engenharia elétrica como referência para dimensionamento de transformadores e sistemas de proteção, pois garante que 95% dos cenários simulados apresentem demanda inferior a este valor."})
+    plt.close(fig)
+
+    # 2. Probabilidade de excedência dos picos
+    picos_sorted = np.sort(picos)
+    prob_excedencia = 1 - (np.arange(1, len(picos_sorted) + 1) / len(picos_sorted))
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(picos_sorted, prob_excedencia * 100, label="Probabilidade de Excedência", linewidth=2, color="#e74c3c")
+    ax.set_title("Probabilidade de Excedência dos Picos Diários")
+    ax.set_xlabel("Pico de Carga (W)")
+    ax.set_ylabel("Probabilidade de Excedência (%)")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    caminho_img = salvar_grafico(fig, "probabilidade_excedencia_picos")
+    imagens_graficos.append({"titulo": "Probabilidade de Excedência dos Picos Diários", "caminho": caminho_img, "descricao": "Este gráfico de excedência apresenta, para cada valor de pico de demanda, a probabilidade de ocorrência de valores superiores. É uma ferramenta essencial para análise de risco elétrico, permitindo avaliar a frequência esperada de eventos críticos de sobrecarga e apoiar decisões de dimensionamento com base em critérios probabilísticos."})
+    plt.close(fig)
+
+    # 3. Curva de duração de carga
+    todas_cargas = np.concatenate(perfis)
+    todas_cargas_sorted = np.sort(todas_cargas)[::-1]
+    frac_tempo = np.arange(1, len(todas_cargas_sorted) + 1) / len(todas_cargas_sorted)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(frac_tempo * 100, todas_cargas_sorted, label="Load Duration Curve", linewidth=2)
+    ax.set_title("Curva de Duração de Carga")
+    ax.set_xlabel("Fração do Tempo (%)")
+    ax.set_ylabel("Carga (W)")
+    ax.grid(True)
+    ax.legend()
+    caminho_img = salvar_grafico(fig, "curva_duracao")
+    imagens_graficos.append({"titulo": "Curva de Duração de Carga", "caminho": caminho_img, "descricao": "A Curva de Duração de Carga (CDC) é uma ferramenta fundamental para análise energética que apresenta os valores de demanda em ordem decrescente de magnitude, revelando por quanto tempo cada nível de carga é mantido ou excedido durante o período analisado. Esta curva é essencial para estudos de viabilidade econômica de sistemas de geração distribuída, dimensionamento de sistemas de armazenamento de energia e análise de contratos de fornecimento com tarifação diferenciada por horário. A inclinação da curva indica a variabilidade da demanda: curvas mais íngremes sugerem grandes variações entre picos e vales de consumo, enquanto curvas mais suaves indicam demanda mais constante ao longo do tempo."})
+    plt.close(fig)
+
+    # 4. Perfil de carga médio
+    tempo = np.arange(tempo_total) / 60.0
+    perfil_medio = np.mean(perfis, axis=0)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(tempo, perfil_medio, linewidth=2, color="blue")
+    ax.set_title("Perfil Médio de Carga ao Longo do Dia")
+    ax.set_xlabel("Hora do Dia")
+    ax.set_ylabel("Carga Média (W)")
+    ax.grid(True, alpha=0.3)
+    caminho_img = salvar_grafico(fig, "perfil_carga")
+    imagens_graficos.append({"titulo": "Perfil Médio de Carga ao Longo do Dia", "caminho": caminho_img, "descricao": "O perfil médio de carga representa a demanda elétrica média esperada para cada minuto do dia, calculada a partir da média de todas as simulações realizadas. Este gráfico é fundamental para o planejamento operacional do sistema elétrico, permitindo identificar os horários de maior e menor demanda, que são cruciais para estratégias de gestão energética e otimização de custos. Os picos de demanda geralmente coincidem com períodos de maior atividade dos hóspedes, como check-in/check-out, horários de refeições e períodos noturnos. A análise deste perfil também orienta decisões sobre implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
+    plt.close(fig)
+
+    # 5. Fator de carga por hora do dia
+    pico_por_minuto = np.max(perfis, axis=0)
+    fator_carga_por_hora = []
+    total_horas = max(1, tempo_total // 60)
+    for h in range(total_horas):
+        inicio = h * 60
+        fim = min(inicio + 60, tempo_total)
+        carga_media_h = np.mean(perfil_medio[inicio:fim])
+        pico_h = np.max(pico_por_minuto[inicio:fim])
+        fator = carga_media_h / pico_h if pico_h > 0 else 0
+        fator_carga_por_hora.append(fator)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(np.arange(total_horas), fator_carga_por_hora, color="#f39c12", alpha=0.8)
+    ax.set_xlabel("Hora do Dia")
+    ax.set_ylabel("Fator de Carga")
+    ax.set_title("Fator de Carga por Hora do Dia")
+    ax.set_xticks(np.arange(total_horas))
+    ax.grid(True, axis="y", linestyle="--", alpha=0.7)
+    caminho_img = salvar_grafico(fig, "fator_carga_por_hora")
+    imagens_graficos.append({"titulo": "Fator de Carga por Hora do Dia", "caminho": caminho_img, "descricao": "O fator de carga horário expressa a razão entre a carga média e a carga máxima em cada hora, indicando o grau de aproveitamento da capacidade elétrica instalada ao longo do dia. Valores elevados refletem uso mais uniforme da infraestrutura, enquanto valores baixos evidenciam maiores oscilações e concentração de demanda em picos."})
+    plt.close(fig)
+
+    # 6. Gráfico de potência cumulativa por cômodo
+    comodos_cargas_medias = {}
+    for comodo_obj in comodos:
+        comodo_copia = copy.deepcopy(comodo_obj)
+        instancias_para_comodo = {comodo_copia.nome: instancias_por_comodo.get(comodo_copia.nome, 1)}
+        _, perfis_comodo, _ = simula_carga_total(
+            [comodo_copia],
+            instancias_para_comodo,
+            num_simulacoes=num_simulacoes,
+            tempo_total=tempo_total
+        )
+        comodos_cargas_medias[comodo_obj.nome] = np.mean(perfis_comodo, axis=0)
+
+    if comodos_cargas_medias:
+        horas = np.arange(tempo_total) / 60.0
+
+        fig, ax = plt.subplots(figsize=(14, 8))
+        comodos_nomes = list(comodos_cargas_medias.keys())
+        comodos_valores = [comodos_cargas_medias[nome] for nome in comodos_nomes]
+
+        ax.stackplot(horas, *comodos_valores, labels=comodos_nomes, alpha=0.8)
+        ax.set_xlabel("Hora do Dia")
+        ax.set_ylabel("Potência (W)")
+        ax.set_title("Potência Cumulativa por Cômodo ao Longo do Dia")
+        ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+
+        caminho_img = salvar_grafico(fig, "potencia_cumulativa_comodo")
+        imagens_graficos.append({"titulo": "Potência Cumulativa por Cômodo ao Longo do Dia", "caminho": caminho_img, "descricao": "Este gráfico de área empilhada (stackplot) ilustra a contribuição individual de cada tipo de cômodo para a demanda total do estabelecimento ao longo do ciclo diário. A análise permite identificar quais categorias de cômodos são os principais consumidores de energia em diferentes horários, fornecendo informações valiosas para estratégias de eficiência energética e priorização de investimentos. A espessura de cada camada representa a magnitude da contribuição de cada tipo de cômodo, enquanto a variação ao longo do tempo revela padrões de uso específicos. Esta visualização é particularmente útil para gestores hoteleiros na tomada de decisões sobre retrofit de equipamentos, implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
+        plt.close(fig)
+
+    return imagens_graficos
+
+
+def escapar_latex(texto):
+    """Escapa caracteres especiais para LaTeX."""
+    substituicoes = {
+        "\\": r"\\textbackslash{}",
+        "&": r"\\&",
+        "%": r"\\%",
+        "$": r"\\$",
+        "#": r"\\#",
+        "_": r"\\_",
+        "{": r"\\{",
+        "}": r"\\}",
+        "~": r"\\textasciitilde{}",
+        "^": r"\\textasciicircum{}",
+    }
+    return "".join(substituicoes.get(c, c) for c in str(texto))
+
+
+
+
+def formatar_intervalos_para_relatorio(intervalos):
+    """Formata intervalos para texto de relatório sem quebrar em casos dinâmicos."""
+    if callable(intervalos):
+        return "Intervalo dinâmico (gerado estocasticamente a cada simulação)"
+
+    if isinstance(intervalos, (list, tuple)):
+        pares_validos = []
+        for item in intervalos:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                pares_validos.append(f"[{item[0]}-{item[1]}]")
+        if pares_validos:
+            return "; ".join(pares_validos)
+        return "Intervalos não estruturados"
+
+    if intervalos is None:
+        return "N/A"
+
+    return str(intervalos)
+
+
+def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes, tempo_total, imagens_graficos, comodos_config_data=None, comodos_originais=None):
+    """Gera um arquivo ZIP com relatório LaTeX técnico completo e imagens dos gráficos."""
+    picos = resultados["picos"]
+    perfis = resultados["perfis"]
+    consumos = resultados["consumos"]
+
+    pico_medio = np.mean(picos)
+    pico_max = np.max(picos)
+    pico_min = np.min(picos)
+    pico_95 = np.percentile(picos, 95)
+    desvio_padrao = np.std(picos)
+    coef_variacao = (desvio_padrao / pico_medio) * 100 if pico_medio > 0 else 0
+    consumo_medio = np.mean(consumos)
+
+    media_por_minuto = np.mean(perfis, axis=0)
+    fator_carga_medio = (np.mean(media_por_minuto) / np.max(media_por_minuto)) * 100 if np.max(media_por_minuto) > 0 else 0
+    ic_inferior = np.percentile(picos, 2.5)
+    ic_superior = np.percentile(picos, 97.5)
+    capacidade_recomendada = pico_95 * 1.2
+
+    total_potencia_instalada_comodos = 0
+    if comodos_originais:
+        for comodo_obj in comodos_originais:
+            total_potencia_instalada_comodos += sum(eq.potencia * eq.quantidade for eq in comodo_obj.equipamentos) * instancias_por_comodo.get(comodo_obj.nome, 1)
+
+    fator_diversidade = pico_medio / total_potencia_instalada_comodos if total_potencia_instalada_comodos > 0 else 0
+
+    if coef_variacao < 15:
+        interpretacao_diversidade = "baixa variabilidade, comportamento previsível e estável"
+    elif coef_variacao < 30:
+        interpretacao_diversidade = "variabilidade moderada, comportamento típico para instalações hoteleiras"
+    else:
+        interpretacao_diversidade = "alta variabilidade, requer monitoramento e análise adicional"
+
+    if fator_carga_medio > 70:
+        interpretacao_fator_carga = "excelente utilização da infraestrutura instalada"
+    elif fator_carga_medio > 50:
+        interpretacao_fator_carga = "boa utilização da infraestrutura"
+    else:
+        interpretacao_fator_carga = "utilização baixa, com grande diferença entre carga média e pico"
+
+    secoes_graficos = []
+    for idx, imagem in enumerate(imagens_graficos, start=1):
+        nome_arquivo = os.path.basename(imagem["caminho"])
+        secoes_graficos.append(fr"""
+\subsection*{{Figura {idx}: {escapar_latex(imagem['titulo'])}}}
+\begin{{figure}}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{{images/{nome_arquivo}}}
+    \caption{{{escapar_latex(imagem['titulo'])}}}
+\end{{figure}}
+
+\textbf{{Análise Técnica:}} {escapar_latex(imagem['descricao'])}
+""")
+
+    linhas_instancias = "\n".join(
+        f"\\item {escapar_latex(nome)}: {quantidade} instância(s)"
+        for nome, quantidade in instancias_por_comodo.items()
+    )
+
+    configuracao_comodos = ""
+    if comodos_originais:
+        blocos = []
+        for comodo in comodos_originais:
+            pot_instalada = sum(eq.potencia * eq.quantidade for eq in comodo.equipamentos)
+            linhas_eq = []
+            for eq in comodo.equipamentos:
+                intervalos = formatar_intervalos_para_relatorio(eq.intervalos)
+                linhas_eq.append(
+                    f"{escapar_latex(eq.nome)} & {eq.potencia:.1f} & {eq.quantidade} & {eq.probabilidade:.2f} & {eq.fator_demanda:.2f} & {escapar_latex(intervalos)} \\\\" 
+                )
+            tabela_eq = "\n".join(linhas_eq) if linhas_eq else "Sem equipamentos cadastrados."
+            blocos.append(fr"""
+\subsection*{{{escapar_latex(comodo.nome)}}}
+Instâncias deste tipo de cômodo: {instancias_por_comodo.get(comodo.nome, 1)}. Potência instalada por unidade: {pot_instalada:.1f} W.
+
+\begin{{longtable}}{{p{{4.2cm}}rrrrp{{4.2cm}}}}
+\toprule
+Equipamento & Potência (W) & Qtde & Prob. & Fator Demanda & Intervalos \\
+\midrule
+{tabela_eq}
+\bottomrule
+\end{{longtable}}
+""")
+        configuracao_comodos = "\n".join(blocos)
+
+    configuracao_manual = ""
+    if comodos_config_data:
+        blocos_man = [r"\subsection*{Configuração Detalhada (Entrada Manual)}"]
+        for comodo_nome, equipamentos_df_list in comodos_config_data.items():
+            blocos_man.append(f"\\paragraph{{{escapar_latex(comodo_nome)}}}")
+            for df in equipamentos_df_list:
+                if not df.empty:
+                    for _, row in df.iterrows():
+                        blocos_man.append(
+                            "\\begin{itemize}"
+                            + f"\\item Equipamento: {escapar_latex(row.get('nome', 'N/A'))}"
+                            + f"\\item Potência: {escapar_latex(row.get('potencia', 'N/A'))} W"
+                            + f"\\item Quantidade: {escapar_latex(row.get('quantidade', 'N/A'))}"
+                            + f"\\item Intervalos: {escapar_latex(row.get('intervalos', 'N/A'))}"
+                            + f"\\item Probabilidade: {escapar_latex(row.get('probabilidade', 'N/A'))}"
+                            + f"\\item Fator de Demanda: {escapar_latex(row.get('fator_demanda', 'N/A'))}"
+                            + "\\end{itemize}"
+                        )
+        configuracao_manual = "\n".join(blocos_man)
+
+    conteudo_tex = fr"""\documentclass[12pt,a4paper]{{article}}
+\usepackage[utf8]{{inputenc}}
+\usepackage[T1]{{fontenc}}
+\usepackage[brazil]{{babel}}
+\usepackage{{lmodern}}
+\usepackage{{geometry}}
+\usepackage{{graphicx}}
+\usepackage{{float}}
+\usepackage{{booktabs}}
+\usepackage{{longtable}}
+\usepackage{{array}}
+\geometry{{margin=2.5cm}}
+
+\title{{RELATÓRIO TÉCNICO DE SIMULAÇÃO MONTE CARLO\\Análise de Carga Elétrica para Dimensionamento de Infraestrutura Hoteleira}}
+\author{{Sistema Desenvolvido por Matheus Vianna\\Engenheiro Especialista em Simulação Monte Carlo}}
+\date{{Gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')}}}
+
+\begin{{document}}
+\maketitle
+
+\section*{{1. Metodologia e Fundamentos Teóricos}}
+A simulação Monte Carlo é uma técnica estatística que utiliza amostragem aleatória repetitiva para obter resultados numéricos de problemas complexos. No contexto deste estudo, a metodologia foi aplicada para modelar o comportamento estocástico da demanda elétrica em estabelecimentos hoteleiros, considerando a variabilidade natural do uso de equipamentos pelos hóspedes.
+
+O sistema implementado realiza {num_simulacoes:,} simulações independentes, cada uma representando um cenário possível de operação do hotel durante um período de {tempo_total // 60} horas. Esta abordagem permite capturar a incerteza inerente ao comportamento dos usuários e fornecer estatísticas robustas para o dimensionamento da infraestrutura elétrica.
+
+\subsection*{{1.1 Modelagem de Instâncias Individualizadas}}
+Uma característica fundamental desta simulação é o tratamento individualizado de cada unidade habitacional. Quando o hotel possui múltiplas unidades do mesmo tipo, cada uma é modelada como uma entidade independente com seu próprio comportamento aleatório. Esta abordagem é crucial para capturar adequadamente o fator de diversidade.
+
+\subsection*{{1.2 Parâmetros de Entrada e Configuração}}
+\begin{{itemize}}
+    \item Número total de simulações realizadas: {num_simulacoes:,}
+    \item Período de análise por simulação: {tempo_total} minutos ({tempo_total // 60} horas)
+    \item Resolução temporal: 1 minuto
+    \item Método de amostragem: pseudo-aleatório com distribuições específicas por equipamento
+\end{{itemize}}
+
+\section*{{2. Configuração do Sistema Simulado}}
+\subsection*{{2.1 Instâncias por Cômodo}}
+\begin{{itemize}}
+{linhas_instancias}
+\end{{itemize}}
+
+\subsection*{{2.2 Potência Instalada e Caracterização por Cômodo}}
+{configuracao_comodos if configuracao_comodos else 'Configuração detalhada por cômodo não disponível nesta execução.'}
+
+{configuracao_manual}
+
+\section*{{3. Resultados Consolidados da Simulação}}
+\begin{{table}}[H]
+    \centering
+    \begin{{tabular}}{{lr}}
+        \toprule
+        Métrica & Valor \\
+        \midrule
+        Pico médio & {pico_medio:.2f} W \\
+        Pico máximo & {pico_max:.2f} W \\
+        Pico mínimo & {pico_min:.2f} W \\
+        Percentil 95 (P95) & {pico_95:.2f} W \\
+        Consumo médio diário & {consumo_medio:.2f} kWh \\
+        \bottomrule
+    \end{{tabular}}
+\end{{table}}
+
+\section*{{4. Análise Gráfica da Demanda}}
+Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da demanda elétrica do estabelecimento, permitindo uma compreensão abrangente dos padrões de consumo e suas implicações para o dimensionamento da infraestrutura.
+{''.join(secoes_graficos)}
+
+\section*{{5. Análise Estatística Avançada}}
+\begin{{itemize}}
+    \item Desvio padrão dos picos: {desvio_padrao:.2f} W
+    \item Coeficiente de variação: {coef_variacao:.2f}\% ({escapar_latex(interpretacao_diversidade)})
+    \item Intervalo de confiança (95\%): {ic_inferior:.2f} W a {ic_superior:.2f} W
+    \item Amplitude de variação: {(pico_max - pico_min):.2f} W
+    \item Fator de carga médio: {fator_carga_medio:.2f}\% ({escapar_latex(interpretacao_fator_carga)})
+    \item Fator de diversidade: {fator_diversidade:.4f}
+    \item Densidade de carga: {(pico_medio / sum(instancias_por_comodo.values())):.2f} W/unidade
+\end{{itemize}}
+
+\section*{{6. Recomendações Técnicas para Dimensionamento}}
+\begin{{itemize}}
+    \item Capacidade recomendada para transformadores: {capacidade_recomendada:.0f} W (P95 + 20\% de margem de segurança).
+    \item Dimensionamento de condutores: considerar fatores de correção por temperatura e agrupamento conforme NBR 5410.
+    \item Sistemas de proteção: ajustes baseados no P95 com coordenação seletiva para garantir continuidade do serviço.
+    \item Fator de demanda global de referência: {(pico_95 / (pico_medio * 1.2)):.4f}.
+\end{{itemize}}
+
+\section*{{7. Conclusões e Considerações Finais}}
+A simulação Monte Carlo realizada com {num_simulacoes:,} cenários independentes fornece uma base estatisticamente robusta para o dimensionamento da infraestrutura elétrica do estabelecimento hoteleiro. A metodologia de instâncias individualizadas permite capturar adequadamente o fator de diversidade, resultando em dimensionamentos mais precisos e economicamente otimizados.
+
+Os resultados apresentados baseiam-se nas configurações de equipamentos e padrões de uso fornecidos. Mudanças significativas no perfil de ocupação, introdução de novos tipos de equipamentos ou alterações nos hábitos dos usuários podem impactar os resultados e requerem reavaliação da simulação.
+
+A capacidade recomendada de {capacidade_recomendada:.0f} W oferece um equilíbrio adequado entre confiabilidade operacional e viabilidade econômica. Recomenda-se implementar monitoramento contínuo para validação dos resultados e refinamento progressivo dos modelos de simulação.
+
+\vspace{{1em}}
+\begin{{center}}
+Relatório Técnico Gerado Automaticamente\\
+Sistema: Simulação Monte Carlo com Instâncias Individualizadas\\
+Desenvolvido por Matheus Vianna --- matheusvianna.com
+\end{{center}}
+
+\end{{document}}
+"""
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr("relatorio_monte_carlo.tex", conteudo_tex)
+
+        for imagem in imagens_graficos:
+            caminho = imagem["caminho"]
+            nome_arquivo = os.path.basename(caminho)
+            with open(caminho, "rb") as arquivo_imagem:
+                zip_file.writestr(f"images/{nome_arquivo}", arquivo_imagem.read())
+
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
+
+
 # Função para gerar PDF com os resultados (versão aprimorada com FPDF2)
 def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo_total, imagens_graficos=None, comodos_config_data=None, comodos_originais=None):
     """Gera um relatório PDF técnico aprimorado com os resultados da simulação usando FPDF2"""
@@ -1274,109 +1659,71 @@ if "comodos" in st.session_state and st.session_state.comodos:
         pico_min = np.min(picos)
         pico_95 = np.percentile(picos, 95)
         
-        # Botão para gerar PDF
-        col_pdf1, col_pdf2 = st.columns([3, 1])
-        with col_pdf2:
+        # Botões para geração de relatórios
+        col_relatorio1, col_relatorio2, col_relatorio3 = st.columns([2, 1, 1])
+
+        with col_relatorio2:
             if st.button("📄 Gerar Relatório PDF", type="secondary"):
                 with st.spinner("Gerando relatório PDF técnico..."):
-                    # Lista para armazenar as imagens dos gráficos
-                    imagens_graficos = []
-                    
-                    # 1. Distribuição dos picos
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    ax.hist(picos, bins=30, alpha=0.7, edgecolor="black", density=True)
-                    ax.axvline(pico_medio, color="red", linestyle="dashed", linewidth=2, label=f"Média: {pico_medio:.0f} W")
-                    ax.axvline(pico_95, color="green", linestyle="dashed", linewidth=2, label=f"P95: {pico_95:.0f} W")
-                    ax.set_title("Distribuição dos Picos de Carga")
-                    ax.set_xlabel("Pico de Carga (W)")
-                    ax.set_ylabel("Frequência Normalizada")
-                    ax.legend()
-                    ax.grid(True)
-                    caminho_img = salvar_grafico(fig, "distribuicao_picos")
-                    imagens_graficos.append({"titulo": "Distribuição dos Picos de Carga", "caminho": caminho_img, "descricao": "Este histograma apresenta a distribuição estatística dos picos de demanda elétrica obtidos através das simulações Monte Carlo. A análise da forma da distribuição fornece insights sobre a previsibilidade do comportamento da carga: distribuições mais concentradas (baixo desvio padrão) indicam comportamento mais previsível, enquanto distribuições mais dispersas sugerem maior variabilidade operacional. A linha vermelha tracejada representa a demanda média máxima esperada, enquanto a linha verde indica o percentil 95 (P95), valor amplamente utilizado na engenharia elétrica como referência para dimensionamento de transformadores e sistemas de proteção, pois garante que 95% dos cenários simulados apresentem demanda inferior a este valor."})
-                    plt.close(fig)
-                    
-                    # 2. Curva de duração de carga
-                    todas_cargas = np.concatenate(perfis)
-                    todas_cargas_sorted = np.sort(todas_cargas)[::-1]
-                    frac_tempo = np.arange(1, len(todas_cargas_sorted) + 1) / len(todas_cargas_sorted)
-                    
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    ax.plot(frac_tempo * 100, todas_cargas_sorted, label="Load Duration Curve", linewidth=2)
-                    ax.set_title("Curva de Duração de Carga")
-                    ax.set_xlabel("Fração do Tempo (%)")
-                    ax.set_ylabel("Carga (W)")
-                    ax.grid(True)
-                    ax.legend()
-                    caminho_img = salvar_grafico(fig, "curva_duracao")
-                    imagens_graficos.append({"titulo": "Curva de Duração de Carga", "caminho": caminho_img, "descricao": "A Curva de Duração de Carga (CDC) é uma ferramenta fundamental para análise energética que apresenta os valores de demanda em ordem decrescente de magnitude, revelando por quanto tempo cada nível de carga é mantido ou excedido durante o período analisado. Esta curva é essencial para estudos de viabilidade econômica de sistemas de geração distribuída, dimensionamento de sistemas de armazenamento de energia e análise de contratos de fornecimento com tarifação diferenciada por horário. A inclinação da curva indica a variabilidade da demanda: curvas mais íngremes sugerem grandes variações entre picos e vales de consumo, enquanto curvas mais suaves indicam demanda mais constante ao longo do tempo."})
-                    plt.close(fig)
-                    
-                    # 3. Perfil de carga médio
-                    media_por_minuto = np.mean(perfis, axis=0)
-                    horas = np.arange(tempo_total) / 60.0
-                    
-                    fig, ax = plt.subplots(figsize=(12, 6))
-                    ax.plot(horas, media_por_minuto, linewidth=2, label="Carga Média", color="#2c3e50")
-                    ax.fill_between(horas, media_por_minuto, alpha=0.3, color="#3498db")
-                    ax.set_xlabel("Hora do Dia")
-                    ax.set_ylabel("Carga (W)")
-                    ax.set_title("Perfil de Carga Médio Durante o Dia")
-                    ax.grid(True, alpha=0.3)
-                    ax.legend()
-                    caminho_img = salvar_grafico(fig, "perfil_carga")
-                    imagens_graficos.append({"titulo": "Perfil de Carga Médio Durante o Dia", "caminho": caminho_img, "descricao": "O perfil de carga médio representa o comportamento típico da demanda elétrica ao longo de um ciclo diário de 24 horas, calculado a partir da média aritmética de todas as simulações realizadas. Este gráfico é fundamental para o planejamento operacional do sistema elétrico, permitindo identificar os horários de maior e menor demanda, que são cruciais para estratégias de gestão energética e otimização de custos. Os picos de demanda geralmente coincidem com períodos de maior atividade dos hóspedes, como check-in/check-out, horários de refeições e períodos noturnos. A análise deste perfil também orienta decisões sobre implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
-                    plt.close(fig)
-                    
-                    # 4. Gráfico de potência cumulativa por cômodo
-                    comodos_cargas_medias = {}
-                    for comodo_obj in st.session_state.comodos:
-                        comodo_copia = copy.deepcopy(comodo_obj)
-                        instancias_para_comodo = {comodo_copia.nome: instancias_por_comodo.get(comodo_copia.nome, 1)}
-                        _, perfis_comodo, _ = simula_carga_total(
-                            [comodo_copia],
-                            instancias_para_comodo,
-                            num_simulacoes=num_simulacoes,
-                            tempo_total=tempo_total
-                        )
-                        comodos_cargas_medias[comodo_obj.nome] = np.mean(perfis_comodo, axis=0)
+                    imagens_graficos = gerar_graficos_relatorio(
+                        picos,
+                        perfis,
+                        pico_medio,
+                        pico_95,
+                        tempo_total,
+                        num_simulacoes,
+                        st.session_state.comodos,
+                        instancias_por_comodo
+                    )
 
-                    if comodos_cargas_medias:
-                        horas = np.arange(tempo_total) / 60.0
-                        
-                        fig, ax = plt.subplots(figsize=(14, 8))
-                        comodos_nomes = list(comodos_cargas_medias.keys())
-                        comodos_valores = [comodos_cargas_medias[nome] for nome in comodos_nomes]
-                        
-                        ax.stackplot(horas, *comodos_valores, labels=comodos_nomes, alpha=0.8)
-                        ax.set_xlabel("Hora do Dia")
-                        ax.set_ylabel("Potência (W)")
-                        ax.set_title("Potência Cumulativa por Cômodo ao Longo do Dia")
-                        ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
-                        ax.grid(True, alpha=0.3)
-                        plt.tight_layout()
-                        
-                        caminho_img = salvar_grafico(fig, "potencia_cumulativa_comodo")
-                        imagens_graficos.append({"titulo": "Potência Cumulativa por Cômodo ao Longo do Dia", "caminho": caminho_img, "descricao": "Este gráfico de área empilhada (stackplot) ilustra a contribuição individual de cada tipo de cômodo para a demanda total do estabelecimento ao longo do ciclo diário. A análise permite identificar quais categorias de cômodos são os principais consumidores de energia em diferentes horários, fornecendo informações valiosas para estratégias de eficiência energética e priorização de investimentos. A espessura de cada camada representa a magnitude da contribuição de cada tipo de cômodo, enquanto a variação ao longo do tempo revela padrões de uso específicos. Esta visualização é particularmente útil para gestores hoteleiros na tomada de decisões sobre retrofit de equipamentos, implementação de sistemas de gestão automática de cargas, dimensionamento de sistemas de climatização e ventilação."})
-                        plt.close(fig)
-                    
-                    # Gera o PDF com as imagens
                     pdf_data = gerar_pdf_relatorio(
-                        resultados, 
-                        instancias_por_comodo, 
-                        num_simulacoes, 
+                        resultados,
+                        instancias_por_comodo,
+                        num_simulacoes,
                         tempo_total,
                         imagens_graficos,
                         st.session_state.comodos_data if st.session_state.data_source == "manual" else None,
                         st.session_state.comodos
                     )
-                    
-                    # Cria link para download
+
                     b64_pdf = base64.b64encode(pdf_data).decode("latin1")
-                    href = f"\n<a href=\"data:application/pdf;base64,{b64_pdf}\" download=\"relatorio_tecnico_monte_carlo.pdf\">📥 Download do Relatório Técnico PDF</a>\n"
+                    href = f'<a href="data:application/pdf;base64,{b64_pdf}" download="relatorio_tecnico_monte_carlo.pdf">📥 Download do Relatório Técnico PDF</a>'
                     st.markdown(href, unsafe_allow_html=True)
                     st.success("✅ Relatório técnico PDF gerado com sucesso!")
-        
+
+        with col_relatorio3:
+            if st.button("🧾 Gerar ZIP LaTeX", type="secondary"):
+                with st.spinner("Gerando pacote ZIP com relatório em LaTeX e imagens..."):
+                    imagens_graficos = gerar_graficos_relatorio(
+                        picos,
+                        perfis,
+                        pico_medio,
+                        pico_95,
+                        tempo_total,
+                        num_simulacoes,
+                        st.session_state.comodos,
+                        instancias_por_comodo
+                    )
+
+                    zip_data = gerar_zip_relatorio_latex(
+                        resultados,
+                        instancias_por_comodo,
+                        num_simulacoes,
+                        tempo_total,
+                        imagens_graficos,
+                        st.session_state.comodos_data if st.session_state.data_source == "manual" else None,
+                        st.session_state.comodos
+                    )
+
+                    st.download_button(
+                        label="📥 Baixar ZIP do Relatório LaTeX",
+                        data=zip_data,
+                        file_name="relatorio_monte_carlo_latex.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                    st.success("✅ Pacote ZIP com .tex e imagens gerado com sucesso!")
+
         # Métricas principais
         col1, col2, col3, col4 = st.columns(4)
         
