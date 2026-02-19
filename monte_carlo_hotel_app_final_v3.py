@@ -766,6 +766,28 @@ def escapar_latex(texto):
     return "".join(substituicoes.get(c, c) for c in str(texto))
 
 
+
+
+def formatar_intervalos_para_relatorio(intervalos):
+    """Formata intervalos para texto de relatório sem quebrar em casos dinâmicos."""
+    if callable(intervalos):
+        return "Intervalo dinâmico (gerado estocasticamente a cada simulação)"
+
+    if isinstance(intervalos, (list, tuple)):
+        pares_validos = []
+        for item in intervalos:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                pares_validos.append(f"[{item[0]}-{item[1]}]")
+        if pares_validos:
+            return "; ".join(pares_validos)
+        return "Intervalos não estruturados"
+
+    if intervalos is None:
+        return "N/A"
+
+    return str(intervalos)
+
+
 def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes, tempo_total, imagens_graficos, comodos_config_data=None, comodos_originais=None):
     """Gera um arquivo ZIP com relatório LaTeX técnico completo e imagens dos gráficos."""
     picos = resultados["picos"]
@@ -833,7 +855,7 @@ def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes,
             pot_instalada = sum(eq.potencia * eq.quantidade for eq in comodo.equipamentos)
             linhas_eq = []
             for eq in comodo.equipamentos:
-                intervalos = "; ".join([f"[{ini}-{fim}]" for ini, fim in eq.intervalos])
+                intervalos = formatar_intervalos_para_relatorio(eq.intervalos)
                 linhas_eq.append(
                     f"{escapar_latex(eq.nome)} & {eq.potencia:.1f} & {eq.quantidade} & {eq.probabilidade:.2f} & {eq.fator_demanda:.2f} & {escapar_latex(intervalos)} \\\\" 
                 )
