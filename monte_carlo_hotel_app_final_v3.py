@@ -229,7 +229,7 @@ try:
     col_esq, col_central, col_dir = st.columns([1, 3, 1])
     
     with col_central:
-        st.image(logo, use_container_width=True)
+        st.image(logo, width="stretch")
     
     st.markdown("""
             ###  **Simulação Monte Carlo para Análise de Carga Elétrica - Demanda e Dados**
@@ -1653,7 +1653,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
     # Seção 4: Executar Simulação
     st.header("🚀 Executar Simulação")
     
-    if st.button("🚀 Executar Simulação Monte Carlo", type="primary", use_container_width=True):
+    if st.button("🚀 Executar Simulação Monte Carlo", type="primary", width="stretch"):
         with st.spinner("Executando simulação Monte Carlo..."):
             # Executa a simulação principal
             picos, perfis, consumos, detalhes_pico = simula_carga_total(
@@ -1753,7 +1753,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                         data=zip_data,
                         file_name="relatorio_monte_carlo_latex.zip",
                         mime="application/zip",
-                        use_container_width=True
+                        width="stretch"
                     )
                     st.success("✅ Pacote ZIP com .tex e imagens gerado com sucesso!")
 
@@ -1826,7 +1826,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                         }
                     ),
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                 )
 
             col_exemplo_1, col_exemplo_2 = st.columns(2)
