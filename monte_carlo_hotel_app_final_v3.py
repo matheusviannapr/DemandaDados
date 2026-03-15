@@ -963,6 +963,72 @@ Equipamento & Potência (W) & Qtde & Prob. & Fator Demanda & Intervalos \\
                         )
         configuracao_manual = "\n".join(blocos_man)
 
+
+    detalhes_pico = resultados.get("detalhes_pico")
+    exemplos_pico_tex = "Dados de equipamentos ativos no pico não disponíveis nesta execução."
+    if detalhes_pico:
+        idx_pico_medio = int(np.argmin(np.abs(picos - pico_medio)))
+        idx_pico_95 = int(np.argmin(np.abs(picos - pico_95)))
+
+        def _hora_minuto(minuto: int) -> str:
+            return f"{minuto // 60:02d}:{minuto % 60:02d}"
+
+        def _tipo_comodo(nome_comodo: str) -> str:
+            partes = str(nome_comodo).rsplit('.', 1)
+            if len(partes) == 2 and partes[1].isdigit():
+                return partes[0]
+            return str(nome_comodo)
+
+        def _tabela_exemplo(indice_simulacao: int, titulo: str, valor_ref: float) -> str:
+            detalhe = detalhes_pico[indice_simulacao]
+            ativos = detalhe.get("equipamentos_ativos", [])
+            minuto = int(detalhe.get("minuto_pico", 0))
+            valor_pico_sim = float(detalhe.get("valor_pico", 0.0))
+
+            cabecalho = (
+                f"\\subsection*{{{escapar_latex(titulo)}}}\n"
+                f"Simulação selecionada: {indice_simulacao + 1}. "
+                f"Pico da simulação: {valor_pico_sim:.2f} W às {_hora_minuto(minuto)}. "
+                f"Valor de referência: {valor_ref:.2f} W.\n"
+            )
+
+            if not ativos:
+                return cabecalho + "\\" + "\n" + "Nenhum equipamento ativo registrado no minuto de pico para este cenário."
+
+            df_ativos = pd.DataFrame(ativos)
+            df_ativos["tipo_comodo"] = df_ativos["comodo"].apply(_tipo_comodo)
+            resumo = (
+                df_ativos.groupby(["tipo_comodo", "equipamento"], as_index=False)
+                .agg(instancias_ligadas=("comodo", "count"), carga_total_w=("carga_w", "sum"))
+                .sort_values("carga_total_w", ascending=False)
+            )
+
+            linhas = []
+            for _, row in resumo.iterrows():
+                linhas.append(
+                    f"{escapar_latex(row['tipo_comodo'])} & "
+                    f"{escapar_latex(row['equipamento'])} & "
+                    f"{int(row['instancias_ligadas'])} & "
+                    f"{float(row['carga_total_w']):.2f} \\\\"
+                )
+            tabela = "\n".join(linhas)
+            return cabecalho + fr"""
+\begin{{longtable}}{{p{{4.0cm}}p{{4.4cm}}rr}}
+\toprule
+Tipo de Cômodo & Equipamento & Instâncias ligadas & Carga total no pico (W) \\
+\midrule
+{tabela}
+\bottomrule
+\end{{longtable}}
+"""
+
+        exemplos_pico_tex = (
+            _tabela_exemplo(idx_pico_medio, "Cenário representativo do Pico Médio", pico_medio)
+            + "\n"
+            + _tabela_exemplo(idx_pico_95, "Cenário representativo do Percentil 95 (P95)", pico_95)
+            + "\n\\textit{Obs.: os cenários apresentados são os mais próximos dos valores de Pico Médio e P95 dentro da amostra Monte Carlo executada.}"
+        )
+
     conteudo_tex = fr"""\documentclass[12pt,a4paper]{{article}}
 \usepackage[utf8]{{inputenc}}
 \usepackage[T1]{{fontenc}}
@@ -1030,7 +1096,10 @@ Uma característica fundamental desta simulação é o tratamento individualizad
 Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da demanda elétrica do estabelecimento, permitindo uma compreensão abrangente dos padrões de consumo e suas implicações para o dimensionamento da infraestrutura.
 {''.join(secoes_graficos)}
 
-\section*{{5. Análise Estatística Avançada}}
+\section*{{5. Exemplos Concretos de Equipamentos Ligados nos Picos}}
+{exemplos_pico_tex}
+
+\section*{{6. Análise Estatística Avançada}}
 \begin{{itemize}}
     \item Desvio padrão dos picos: {desvio_padrao:.2f} W
     \item Coeficiente de variação: {coef_variacao:.2f}\% ({escapar_latex(interpretacao_diversidade)})
@@ -1041,7 +1110,7 @@ Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da de
     \item Densidade de carga: {(pico_medio / sum(instancias_por_comodo.values())):.2f} W/unidade
 \end{{itemize}}
 
-\section*{{6. Recomendações Técnicas para Dimensionamento}}
+\section*{{7. Recomendações Técnicas para Dimensionamento}}
 \begin{{itemize}}
     \item Capacidade recomendada para transformadores: {capacidade_recomendada:.0f} W (P95 + 20\% de margem de segurança).
     \item Dimensionamento de condutores: considerar fatores de correção por temperatura e agrupamento conforme NBR 5410.
@@ -1049,7 +1118,7 @@ Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da de
     \item Fator de demanda global de referência: {(pico_95 / (pico_medio * 1.2)):.4f}.
 \end{{itemize}}
 
-\section*{{7. Conclusões e Considerações Finais}}
+\section*{{8. Conclusões e Considerações Finais}}
 A simulação Monte Carlo realizada com {num_simulacoes:,} cenários independentes fornece uma base estatisticamente robusta para o dimensionamento da infraestrutura elétrica do estabelecimento hoteleiro. A metodologia de instâncias individualizadas permite capturar adequadamente o fator de diversidade, resultando em dimensionamentos mais precisos e economicamente otimizados.
 
 Os resultados apresentados baseiam-se nas configurações de equipamentos e padrões de uso fornecidos. Mudanças significativas no perfil de ocupação, introdução de novos tipos de equipamentos ou alterações nos hábitos dos usuários podem impactar os resultados e requerem reavaliação da simulação.
