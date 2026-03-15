@@ -229,7 +229,7 @@ try:
     col_esq, col_central, col_dir = st.columns([1, 3, 1])
     
     with col_central:
-        st.image(logo, use_container_width=True)
+        st.image(logo, width="stretch")
     
     st.markdown("""
             ###  **Simulação Monte Carlo para Análise de Carga Elétrica - Demanda e Dados**
@@ -640,22 +640,53 @@ def simula_carga_total(
     instancias_por_comodo: dict,
     num_simulacoes: int = 1000,
     tempo_total: int = 1440,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    coletar_detalhes_pico: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[List[dict]]]:
     picos = []
     perfis = []
     consumos_diarios = []
+    detalhes_pico = [] if coletar_detalhes_pico else None
     comodos_individualizados = cria_comodos_individualizados(comodos, instancias_por_comodo)
 
     for _ in range(num_simulacoes):
         load_total = np.zeros(tempo_total)
-        for comodo in comodos_individualizados:
-            load_total += comodo.simula_carga(tempo_total)
+        cargas_equipamentos = []
 
-        picos.append(np.max(load_total))
+        for comodo in comodos_individualizados:
+            for eq in comodo.equipamentos:
+                carga_eq = eq.simula_carga(tempo_total)
+                load_total += carga_eq
+                if coletar_detalhes_pico:
+                    cargas_equipamentos.append((comodo.nome, eq.nome, carga_eq))
+
+        minuto_pico = int(np.argmax(load_total))
+        valor_pico = float(np.max(load_total))
+
+        picos.append(valor_pico)
         perfis.append(load_total)
         consumos_diarios.append(np.sum(load_total) / 1000 / 60)
 
-    return np.array(picos), np.array(perfis), np.array(consumos_diarios)
+        if coletar_detalhes_pico:
+            equipamentos_ativos = []
+            for nome_comodo, nome_equipamento, carga_eq in cargas_equipamentos:
+                carga_no_pico = float(carga_eq[minuto_pico])
+                if carga_no_pico > 0:
+                    equipamentos_ativos.append({
+                        "comodo": nome_comodo,
+                        "equipamento": nome_equipamento,
+                        "carga_w": carga_no_pico,
+                    })
+
+            equipamentos_ativos.sort(key=lambda item: item["carga_w"], reverse=True)
+            detalhes_pico.append(
+                {
+                    "minuto_pico": minuto_pico,
+                    "valor_pico": valor_pico,
+                    "equipamentos_ativos": equipamentos_ativos,
+                }
+            )
+
+    return np.array(picos), np.array(perfis), np.array(consumos_diarios), detalhes_pico
 
 
 # Função para salvar gráficos como imagens
@@ -757,7 +788,7 @@ def gerar_graficos_relatorio(picos, perfis, pico_medio, pico_95, tempo_total, nu
     for comodo_obj in comodos:
         comodo_copia = copy.deepcopy(comodo_obj)
         instancias_para_comodo = {comodo_copia.nome: instancias_por_comodo.get(comodo_copia.nome, 1)}
-        _, perfis_comodo, _ = simula_carga_total(
+        _, perfis_comodo, _, _ = simula_carga_total(
             [comodo_copia],
             instancias_para_comodo,
             num_simulacoes=num_simulacoes,
@@ -879,7 +910,7 @@ def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes,
 \end{{figure}}
 
 \textbf{{Análise Técnica:}} {escapar_latex(imagem['descricao'])}
-""")
+    """)
 
     linhas_instancias = "\n".join(
         f"\\item {escapar_latex(nome)}: {quantidade} instância(s)"
@@ -931,6 +962,72 @@ Equipamento & Potência (W) & Qtde & Prob. & Fator Demanda & Intervalos \\
                             + "\\end{itemize}"
                         )
         configuracao_manual = "\n".join(blocos_man)
+
+
+    detalhes_pico = resultados.get("detalhes_pico")
+    exemplos_pico_tex = "Dados de equipamentos ativos no pico não disponíveis nesta execução."
+    if detalhes_pico:
+        idx_pico_medio = int(np.argmin(np.abs(picos - pico_medio)))
+        idx_pico_95 = int(np.argmin(np.abs(picos - pico_95)))
+
+        def _hora_minuto(minuto: int) -> str:
+            return f"{minuto // 60:02d}:{minuto % 60:02d}"
+
+        def _tipo_comodo(nome_comodo: str) -> str:
+            partes = str(nome_comodo).rsplit('.', 1)
+            if len(partes) == 2 and partes[1].isdigit():
+                return partes[0]
+            return str(nome_comodo)
+
+        def _tabela_exemplo(indice_simulacao: int, titulo: str, valor_ref: float) -> str:
+            detalhe = detalhes_pico[indice_simulacao]
+            ativos = detalhe.get("equipamentos_ativos", [])
+            minuto = int(detalhe.get("minuto_pico", 0))
+            valor_pico_sim = float(detalhe.get("valor_pico", 0.0))
+
+            cabecalho = (
+                f"\\subsection*{{{escapar_latex(titulo)}}}\n"
+                f"Simulação selecionada: {indice_simulacao + 1}. "
+                f"Pico da simulação: {valor_pico_sim:.2f} W às {_hora_minuto(minuto)}. "
+                f"Valor de referência: {valor_ref:.2f} W.\n"
+            )
+
+            if not ativos:
+                return cabecalho + "\\" + "\n" + "Nenhum equipamento ativo registrado no minuto de pico para este cenário."
+
+            df_ativos = pd.DataFrame(ativos)
+            df_ativos["tipo_comodo"] = df_ativos["comodo"].apply(_tipo_comodo)
+            resumo = (
+                df_ativos.groupby(["tipo_comodo", "equipamento"], as_index=False)
+                .agg(instancias_ligadas=("comodo", "count"), carga_total_w=("carga_w", "sum"))
+                .sort_values("carga_total_w", ascending=False)
+            )
+
+            linhas = []
+            for _, row in resumo.iterrows():
+                linhas.append(
+                    f"{escapar_latex(row['tipo_comodo'])} & "
+                    f"{escapar_latex(row['equipamento'])} & "
+                    f"{int(row['instancias_ligadas'])} & "
+                    f"{float(row['carga_total_w']):.2f} \\\\"
+                )
+            tabela = "\n".join(linhas)
+            return cabecalho + fr"""
+\begin{{longtable}}{{p{{4.0cm}}p{{4.4cm}}rr}}
+\toprule
+Tipo de Cômodo & Equipamento & Instâncias ligadas & Carga total no pico (W) \\
+\midrule
+{tabela}
+\bottomrule
+\end{{longtable}}
+"""
+
+        exemplos_pico_tex = (
+            _tabela_exemplo(idx_pico_medio, "Cenário representativo do Pico Médio", pico_medio)
+            + "\n"
+            + _tabela_exemplo(idx_pico_95, "Cenário representativo do Percentil 95 (P95)", pico_95)
+            + "\n\\textit{Obs.: os cenários apresentados são os mais próximos dos valores de Pico Médio e P95 dentro da amostra Monte Carlo executada.}"
+        )
 
     conteudo_tex = fr"""\documentclass[12pt,a4paper]{{article}}
 \usepackage[utf8]{{inputenc}}
@@ -999,7 +1096,10 @@ Uma característica fundamental desta simulação é o tratamento individualizad
 Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da demanda elétrica do estabelecimento, permitindo uma compreensão abrangente dos padrões de consumo e suas implicações para o dimensionamento da infraestrutura.
 {''.join(secoes_graficos)}
 
-\section*{{5. Análise Estatística Avançada}}
+\section*{{5. Exemplos Concretos de Equipamentos Ligados nos Picos}}
+{exemplos_pico_tex}
+
+\section*{{6. Análise Estatística Avançada}}
 \begin{{itemize}}
     \item Desvio padrão dos picos: {desvio_padrao:.2f} W
     \item Coeficiente de variação: {coef_variacao:.2f}\% ({escapar_latex(interpretacao_diversidade)})
@@ -1010,7 +1110,7 @@ Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da de
     \item Densidade de carga: {(pico_medio / sum(instancias_por_comodo.values())):.2f} W/unidade
 \end{{itemize}}
 
-\section*{{6. Recomendações Técnicas para Dimensionamento}}
+\section*{{7. Recomendações Técnicas para Dimensionamento}}
 \begin{{itemize}}
     \item Capacidade recomendada para transformadores: {capacidade_recomendada:.0f} W (P95 + 20\% de margem de segurança).
     \item Dimensionamento de condutores: considerar fatores de correção por temperatura e agrupamento conforme NBR 5410.
@@ -1018,7 +1118,7 @@ Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da de
     \item Fator de demanda global de referência: {(pico_95 / (pico_medio * 1.2)):.4f}.
 \end{{itemize}}
 
-\section*{{7. Conclusões e Considerações Finais}}
+\section*{{8. Conclusões e Considerações Finais}}
 A simulação Monte Carlo realizada com {num_simulacoes:,} cenários independentes fornece uma base estatisticamente robusta para o dimensionamento da infraestrutura elétrica do estabelecimento hoteleiro. A metodologia de instâncias individualizadas permite capturar adequadamente o fator de diversidade, resultando em dimensionamentos mais precisos e economicamente otimizados.
 
 Os resultados apresentados baseiam-se nas configurações de equipamentos e padrões de uso fornecidos. Mudanças significativas no perfil de ocupação, introdução de novos tipos de equipamentos ou alterações nos hábitos dos usuários podem impactar os resultados e requerem reavaliação da simulação.
@@ -1622,14 +1722,15 @@ if "comodos" in st.session_state and st.session_state.comodos:
     # Seção 4: Executar Simulação
     st.header("🚀 Executar Simulação")
     
-    if st.button("🚀 Executar Simulação Monte Carlo", type="primary", use_container_width=True):
+    if st.button("🚀 Executar Simulação Monte Carlo", type="primary", width="stretch"):
         with st.spinner("Executando simulação Monte Carlo..."):
             # Executa a simulação principal
-            picos, perfis, consumos = simula_carga_total(
+            picos, perfis, consumos, detalhes_pico = simula_carga_total(
                 st.session_state.comodos,
                 instancias_por_comodo,
                 num_simulacoes=num_simulacoes,
-                tempo_total=tempo_total
+                tempo_total=tempo_total,
+                coletar_detalhes_pico=True
             )
             
             # Armazena os resultados no session_state
@@ -1637,6 +1738,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                 "picos": picos,
                 "perfis": perfis,
                 "consumos": consumos,
+                "detalhes_pico": detalhes_pico,
                 "instancias_por_comodo": instancias_por_comodo,
                 "num_simulacoes": num_simulacoes,
                 "tempo_total": tempo_total
@@ -1720,7 +1822,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                         data=zip_data,
                         file_name="relatorio_monte_carlo_latex.zip",
                         mime="application/zip",
-                        use_container_width=True
+                        width="stretch"
                     )
                     st.success("✅ Pacote ZIP com .tex e imagens gerado com sucesso!")
 
@@ -1738,6 +1840,74 @@ if "comodos" in st.session_state and st.session_state.comodos:
         
         with col4:
             st.metric("Percentil 95", f" {pico_95:.0f} W")
+
+        detalhes_pico = resultados.get("detalhes_pico")
+        if detalhes_pico:
+            st.markdown("---")
+            st.subheader("🔎 Exemplo concreto: equipamentos ligados no Pico Médio e no P95")
+
+            idx_pico_medio = int(np.argmin(np.abs(picos - pico_medio)))
+            idx_pico_95 = int(np.argmin(np.abs(picos - pico_95)))
+
+            def _formatar_hora(minuto: int) -> str:
+                return f"{minuto // 60:02d}:{minuto % 60:02d}"
+
+            def _tipo_comodo(nome_comodo: str) -> str:
+                partes = nome_comodo.rsplit('.', 1)
+                if len(partes) == 2 and partes[1].isdigit():
+                    return partes[0]
+                return nome_comodo
+
+            def _renderizar_exemplo(indice_simulacao: int, titulo: str, valor_referencia: float):
+                detalhe = detalhes_pico[indice_simulacao]
+                ativos = detalhe["equipamentos_ativos"]
+                minuto_pico = int(detalhe["minuto_pico"])
+
+                st.markdown(
+                    f"**{titulo}** — Simulação #{indice_simulacao + 1} | "
+                    f"Pico da simulação: **{detalhe['valor_pico']:.0f} W** às **{_formatar_hora(minuto_pico)}** | "
+                    f"Referência: **{valor_referencia:.0f} W**"
+                )
+
+                if not ativos:
+                    st.warning("Nenhum equipamento ativo encontrado no minuto do pico desta simulação.")
+                    return
+
+                df_ativos = pd.DataFrame(ativos)
+                df_ativos["tipo_comodo"] = df_ativos["comodo"].apply(_tipo_comodo)
+                resumo = (
+                    df_ativos
+                    .groupby(["tipo_comodo", "equipamento"], as_index=False)
+                    .agg(
+                        instancias_ligadas=("comodo", "count"),
+                        carga_total_w=("carga_w", "sum"),
+                    )
+                    .sort_values("carga_total_w", ascending=False)
+                )
+
+                st.dataframe(
+                    resumo.rename(
+                        columns={
+                            "tipo_comodo": "Tipo de Cômodo",
+                            "equipamento": "Equipamento",
+                            "instancias_ligadas": "Instâncias ligadas",
+                            "carga_total_w": "Carga total no pico (W)",
+                        }
+                    ),
+                    hide_index=True,
+                    width="stretch",
+                )
+
+            col_exemplo_1, col_exemplo_2 = st.columns(2)
+            with col_exemplo_1:
+                _renderizar_exemplo(idx_pico_medio, "Cenário representativo do Pico Médio", pico_medio)
+            with col_exemplo_2:
+                _renderizar_exemplo(idx_pico_95, "Cenário representativo do Percentil 95 (P95)", pico_95)
+
+            st.caption(
+                "Obs.: os cenários exibidos são as simulações mais próximas dos valores de Pico Médio e P95 "
+                "dentro da amostra Monte Carlo executada."
+            )
         
         # Tabs para diferentes análises (removida a aba "Variação da Carga")
         tab1, tab2, tab3, tab4 = st.tabs([
@@ -1844,7 +2014,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
             for comodo_obj in st.session_state.comodos:
                 comodo_copia = copy.deepcopy(comodo_obj)
                 instancias_para_comodo = {comodo_copia.nome: instancias_por_comodo.get(comodo_copia.nome, 1)}
-                _, perfis_comodo, _ = simula_carga_total(
+                _, perfis_comodo, _, _ = simula_carga_total(
                     [comodo_copia],
                     instancias_para_comodo,
                     num_simulacoes=num_simulacoes,
