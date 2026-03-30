@@ -641,11 +641,13 @@ def simula_carga_total(
     num_simulacoes: int = 1000,
     tempo_total: int = 1440,
     coletar_detalhes_pico: bool = False,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[List[dict]]]:
+    coletar_analise_energia: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[List[dict]], Optional[pd.DataFrame]]:
     picos = []
     perfis = []
     consumos_diarios = []
     detalhes_pico = [] if coletar_detalhes_pico else None
+    energia_por_equipamento = {} if coletar_analise_energia else None
     comodos_individualizados = cria_comodos_individualizados(comodos, instancias_por_comodo)
 
     for _ in range(num_simulacoes):
@@ -658,6 +660,26 @@ def simula_carga_total(
                 load_total += carga_eq
                 if coletar_detalhes_pico:
                     cargas_equipamentos.append((comodo.nome, eq.nome, carga_eq))
+                if coletar_analise_energia:
+                    tipo_comodo = comodo.nome.rsplit('.', 1)[0]
+                    chave = (tipo_comodo, eq.nome)
+                    if chave not in energia_por_equipamento:
+                        energia_por_equipamento[chave] = {
+                            "tipo_comodo": tipo_comodo,
+                            "equipamento": eq.nome,
+                            "energia_kwh_total": 0.0,
+                            "tempo_ativo_min_total": 0.0,
+                            "ocorrencias_dia_ativo": 0,
+                            "simulacoes_observadas": 0,
+                        }
+
+                    energia_kwh = float(np.sum(carga_eq) / 1000 / 60)
+                    minutos_ativos = int(np.count_nonzero(carga_eq > 0))
+                    energia_por_equipamento[chave]["energia_kwh_total"] += energia_kwh
+                    energia_por_equipamento[chave]["tempo_ativo_min_total"] += minutos_ativos
+                    energia_por_equipamento[chave]["simulacoes_observadas"] += 1
+                    if minutos_ativos > 0:
+                        energia_por_equipamento[chave]["ocorrencias_dia_ativo"] += 1
 
         minuto_pico = int(np.argmax(load_total))
         valor_pico = float(np.max(load_total))
@@ -686,7 +708,27 @@ def simula_carga_total(
                 }
             )
 
-    return np.array(picos), np.array(perfis), np.array(consumos_diarios), detalhes_pico
+    df_energia = None
+    if coletar_analise_energia and energia_por_equipamento:
+        registros = []
+        for dados in energia_por_equipamento.values():
+            simulacoes_observadas = max(1, dados["simulacoes_observadas"])
+            registros.append(
+                {
+                    "Tipo de Cômodo": dados["tipo_comodo"],
+                    "Equipamento": dados["equipamento"],
+                    "Energia média prevista (kWh/dia)": dados["energia_kwh_total"] / simulacoes_observadas,
+                    "Tempo médio ativo (h/dia)": (dados["tempo_ativo_min_total"] / simulacoes_observadas) / 60,
+                    "Probabilidade de entrada (%)": (dados["ocorrencias_dia_ativo"] / simulacoes_observadas) * 100,
+                }
+            )
+        df_energia = (
+            pd.DataFrame(registros)
+            .sort_values("Energia média prevista (kWh/dia)", ascending=False)
+            .reset_index(drop=True)
+        )
+
+    return np.array(picos), np.array(perfis), np.array(consumos_diarios), detalhes_pico, df_energia
 
 
 # Função para salvar gráficos como imagens
@@ -788,7 +830,7 @@ def gerar_graficos_relatorio(picos, perfis, pico_medio, pico_95, tempo_total, nu
     for comodo_obj in comodos:
         comodo_copia = copy.deepcopy(comodo_obj)
         instancias_para_comodo = {comodo_copia.nome: instancias_por_comodo.get(comodo_copia.nome, 1)}
-        _, perfis_comodo, _, _ = simula_carga_total(
+        _, perfis_comodo, _, _, _ = simula_carga_total(
             [comodo_copia],
             instancias_para_comodo,
             num_simulacoes=num_simulacoes,
@@ -1725,12 +1767,13 @@ if "comodos" in st.session_state and st.session_state.comodos:
     if st.button("🚀 Executar Simulação Monte Carlo", type="primary", width="stretch"):
         with st.spinner("Executando simulação Monte Carlo..."):
             # Executa a simulação principal
-            picos, perfis, consumos, detalhes_pico = simula_carga_total(
+            picos, perfis, consumos, detalhes_pico, analise_energia_df = simula_carga_total(
                 st.session_state.comodos,
                 instancias_por_comodo,
                 num_simulacoes=num_simulacoes,
                 tempo_total=tempo_total,
-                coletar_detalhes_pico=True
+                coletar_detalhes_pico=True,
+                coletar_analise_energia=True,
             )
             
             # Armazena os resultados no session_state
@@ -1739,6 +1782,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                 "perfis": perfis,
                 "consumos": consumos,
                 "detalhes_pico": detalhes_pico,
+                "analise_energia": analise_energia_df,
                 "instancias_por_comodo": instancias_por_comodo,
                 "num_simulacoes": num_simulacoes,
                 "tempo_total": tempo_total
@@ -1910,11 +1954,12 @@ if "comodos" in st.session_state and st.session_state.comodos:
             )
         
         # Tabs para diferentes análises (removida a aba "Variação da Carga")
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📊 Distribuição dos Picos",
             "📈 Curva de Duração",
             "⚡ Perfil de Carga",
-            "📈 Potência Cumulativa por Cômodo"
+            "📈 Potência Cumulativa por Cômodo",
+            "🔋 Análise de Energia Prevista",
         ])
         
         with tab1:
@@ -2014,7 +2059,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
             for comodo_obj in st.session_state.comodos:
                 comodo_copia = copy.deepcopy(comodo_obj)
                 instancias_para_comodo = {comodo_copia.nome: instancias_por_comodo.get(comodo_copia.nome, 1)}
-                _, perfis_comodo, _, _ = simula_carga_total(
+                _, perfis_comodo, _, _, _ = simula_carga_total(
                     [comodo_copia],
                     instancias_para_comodo,
                     num_simulacoes=num_simulacoes,
@@ -2039,6 +2084,29 @@ if "comodos" in st.session_state and st.session_state.comodos:
                 st.pyplot(fig)
             else:
                 st.warning("Não foi possível gerar o gráfico de potência cumulativa por cômodo. Verifique a configuração dos cômodos.")
+
+        with tab5:
+            st.subheader("Análise de Energia Prevista por Equipamento")
+            st.write(
+                "A tabela abaixo estima a energia média diária por equipamento considerando os intervalos de uso, "
+                "probabilidades de acionamento e fator de demanda aplicados nas simulações Monte Carlo."
+            )
+
+            analise_energia = resultados.get("analise_energia")
+            if analise_energia is not None and not analise_energia.empty:
+                total_kwh = analise_energia["Energia média prevista (kWh/dia)"].sum()
+                st.metric("Energia diária total prevista", f"{total_kwh:.2f} kWh/dia")
+                st.dataframe(
+                    analise_energia.style.format({
+                        "Energia média prevista (kWh/dia)": "{:.3f}",
+                        "Tempo médio ativo (h/dia)": "{:.2f}",
+                        "Probabilidade de entrada (%)": "{:.1f}",
+                    }),
+                    hide_index=True,
+                    width="stretch",
+                )
+            else:
+                st.warning("A análise de energia não está disponível para esta execução.")
 
 else:
     if entrada_dados == "📁 Upload de arquivo Excel":
