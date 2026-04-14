@@ -41,3 +41,6 @@ python -m app.db.seed
 
 
 > Entry point padrão para deploy atual: `monte_carlo_hotel_app_final_v3.py` (agora apontando para a arquitetura modular).
+
+
+Se a navegação lateral não aparecer no deploy, use os atalhos de "Fluxo rápido" na página inicial.
