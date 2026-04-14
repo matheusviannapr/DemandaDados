@@ -12,7 +12,4 @@ if "repo" not in st.session_state:
 
 st.title("Demanda e Dádio")
 st.write("Plataforma de modelagem e simulação de demanda elétrica.")
-st.info(
-    "Aplicação migrada para arquitetura modular. "
-    "Use o menu lateral para seguir o fluxo: cenário → equipamentos → perfis → sazonalidade → simulação → resultados."
-)
+st.info("Use o menu lateral para seguir o fluxo: cenário → equipamentos → perfis → sazonalidade → simulação → resultados.")

@@ -1,88 +1,43 @@
-# Simulação Monte Carlo para Análise de Carga Elétrica em Hotel
+# Demanda e Dádio (MVP Streamlit)
 
-Sistema avançado de simulação Monte Carlo para dimensionamento de infraestrutura elétrica em estabelecimentos hoteleiros.
+Plataforma de modelagem e simulação de demanda elétrica com foco em:
+- Cenários e equipamentos persistidos em banco de dados
+- Perfis de consumo e sazonalidade
+- Simulação Monte Carlo vetorizada com NumPy
+- Interface multipágina em Streamlit
 
-## 🎯 Objetivo
+## Banco de dados (SQLite local ou Neon/PostgreSQL)
 
-Este aplicativo utiliza a técnica de **Simulação Monte Carlo** para analisar o comportamento da carga elétrica em hotéis, considerando a variabilidade natural do uso de equipamentos pelos hóspedes. O sistema simula milhares de cenários diferentes para fornecer estatísticas confiáveis para o dimensionamento da infraestrutura elétrica.
+Por padrão, o app usa SQLite local em `data/demanda.db`.
 
-## 🚀 Como Executar
-
-### 1. Instalação das Dependências
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Executar o Aplicativo
+Para persistência em nuvem (Neon), defina `DATABASE_URL` antes de iniciar:
 
 ```bash
+export DATABASE_URL='postgresql+psycopg://USER:SENHA@ep-xxxx.us-east-2.aws.neon.tech/neondb?sslmode=require'
 streamlit run monte_carlo_hotel_app_final_v3.py
 ```
 
-### 3. Acessar no Navegador
+Sem `DATABASE_URL`, o fallback é SQLite local.
 
-O aplicativo será aberto automaticamente no navegador em `http://localhost:8501`
+## Executar
 
-## 📁 Arquivos Incluídos
+```bash
+pip install -r requirements.txt
+streamlit run monte_carlo_hotel_app_final_v3.py
+```
 
-- `monte_carlo_hotel_app_final_v3.py` - Aplicativo Streamlit principal
-- `exemplo_hotel.xlsx` - Arquivo Excel de exemplo para testes
-- `logo_demanda_dados.png` - Logo do aplicativo
-- `requirements.txt` - Dependências Python necessárias
-- `README.md` - Este arquivo de instruções
+## Seed opcional
 
-## 🔧 Funcionalidades
+```bash
+python -m app.db.seed
+```
 
-### Entrada de Dados
-- **Upload de Excel**: Carregue arquivos Excel com configuração dos cômodos
-- **Entrada Direta**: Interface para inserir dados diretamente no aplicativo
+## Estrutura
 
-### Simulação Monte Carlo
-- Instâncias individualizadas de cada cômodo
-- Variabilidade temporal com intervalos fixos ou dinâmicos
-- Fatores probabilísticos e de demanda
-- Análise estatística avançada
+- `app/core`: modelos, parser, sazonalidade e simulação
+- `app/db`: conexão, schema e repositórios
+- `app/pages`: fluxo do usuário (upload até resultados)
+- `app/ui`: componentes reutilizáveis da interface
 
-### Resultados e Análises
-- Distribuição dos picos de carga
-- Curva de duração de carga
-- Perfil de carga médio
-- Potência cumulativa por cômodo
-- Relatório PDF técnico completo
 
-## 📊 Formato do Arquivo Excel
-
-O arquivo Excel deve conter abas nomeadas pelos tipos de cômodos com as seguintes colunas:
-
-| Coluna | Descrição | Exemplo |
-|--------|-----------|---------|
-| Equipamento | Nome do equipamento | "Ar Condicionado" |
-| Potência | Potência nominal em watts | 2000 |
-| Quantidade | Número de unidades | 1 |
-| Tipo de intervalo | "fixo" ou "dinâmico" | "dinâmico" |
-| intervalo | Período de funcionamento | "Início entre 14:00-18:00, duração 6" |
-| probabilidade | Chance de estar ligado (0.0-1.0) | 0.8 |
-| FD | Fator de demanda (0.1-1.0) | 0.8 |
-
-## 🎨 Características Técnicas
-
-- **Interface**: Streamlit com tema marinho personalizado
-- **Simulação**: Monte Carlo com instâncias individualizadas
-- **Relatórios**: PDF técnico com análises detalhadas
-- **Visualizações**: Gráficos interativos e explicações técnicas
-
-## 👨‍💻 Desenvolvedor
-
-**Matheus Vianna**  
-Engenheiro Especialista em Simulação Monte Carlo  
-Website: [matheusvianna.com](https://matheusvianna.com)
-
-## 📄 Licença
-
-© 2025 - Todos os direitos reservados
-
-## 🆘 Suporte
-
-Para questões técnicas ou esclarecimentos, consulte a documentação técnica do sistema ou entre em contato através do website oficial.
-
+> Entry point padrão para deploy atual: `monte_carlo_hotel_app_final_v3.py` (agora apontando para a arquitetura modular).
