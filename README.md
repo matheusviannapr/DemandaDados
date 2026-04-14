@@ -49,3 +49,6 @@ A navegação agora é feita por um menu de etapas na barra lateral (radio), sem
 
 Na página **Upload e cenário**, existe a opção **Criar cenário com modelo padrão**.
 Ela gera automaticamente um cenário de exemplo (hotel) para o usuário entender rapidamente o fluxo completo de uso do software.
+
+
+Na página **Equipamentos**, é possível editar por equipamento: potência, probabilidade, duração, ciclos e também janela de uso (`inicio`, `fim`, `prioridade`, `tipo`).

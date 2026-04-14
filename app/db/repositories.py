@@ -87,14 +87,79 @@ class Repository:
         return self._fetch_all(
             """
             SELECT e.id, a.nome as ambiente, e.nome, e.tipo_equipamento, e.potencia_kw, e.quantidade,
-                   e.prob_uso_base, e.duracao_base_h, e.ciclos_por_dia_base, e.fator_carga_base
+                   e.prob_uso_base, e.duracao_base_h, e.ciclos_por_dia_base, e.fator_carga_base,
+                   COALESCE(ju.inicio_hora, 0) as janela_inicio_hora,
+                   COALESCE(ju.fim_hora, 23) as janela_fim_hora,
+                   COALESCE(ju.prioridade, 1) as janela_prioridade,
+                   COALESCE(ju.tipo_janela, 'preferencial') as janela_tipo
             FROM equipamentos e
             JOIN ambientes a ON a.id = e.ambiente_id
+            LEFT JOIN janelas_uso ju ON ju.equipamento_id = e.id
+                AND ju.id = (SELECT MIN(j2.id) FROM janelas_uso j2 WHERE j2.equipamento_id = e.id)
             WHERE a.cenario_id = :cenario_id
             ORDER BY a.nome, e.nome
             """,
             {"cenario_id": cenario_id},
         )
+
+    def atualizar_equipamentos(self, rows: list[dict[str, Any]]) -> None:
+        with self.engine.begin() as conn:
+            for row in rows:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE equipamentos
+                        SET nome = :nome,
+                            tipo_equipamento = :tipo_equipamento,
+                            potencia_kw = :potencia_kw,
+                            quantidade = :quantidade,
+                            prob_uso_base = :prob_uso_base,
+                            duracao_base_h = :duracao_base_h,
+                            ciclos_por_dia_base = :ciclos_por_dia_base,
+                            fator_carga_base = :fator_carga_base
+                        WHERE id = :id
+                        """
+                    ),
+                    {
+                        "id": int(row["id"]),
+                        "nome": row["nome"],
+                        "tipo_equipamento": row["tipo_equipamento"],
+                        "potencia_kw": float(row["potencia_kw"]),
+                        "quantidade": int(row["quantidade"]),
+                        "prob_uso_base": float(row["prob_uso_base"]),
+                        "duracao_base_h": float(row["duracao_base_h"]),
+                        "ciclos_por_dia_base": float(row["ciclos_por_dia_base"]),
+                        "fator_carga_base": float(row["fator_carga_base"]),
+                    },
+                )
+
+                existing = conn.execute(
+                    text("SELECT id FROM janelas_uso WHERE equipamento_id = :equipamento_id ORDER BY id LIMIT 1"),
+                    {"equipamento_id": int(row["id"])},
+                ).mappings().first()
+
+                janela_payload = {
+                    "equipamento_id": int(row["id"]),
+                    "inicio": int(row.get("janela_inicio_hora", 0)),
+                    "fim": int(row.get("janela_fim_hora", 23)),
+                    "prioridade": int(row.get("janela_prioridade", 1)),
+                    "tipo": row.get("janela_tipo", "preferencial"),
+                }
+
+                if existing:
+                    conn.execute(
+                        text(
+                            "UPDATE janelas_uso SET inicio_hora = :inicio, fim_hora = :fim, prioridade = :prioridade, tipo_janela = :tipo WHERE id = :id"
+                        ),
+                        {**janela_payload, "id": int(existing["id"])},
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            "INSERT INTO janelas_uso (equipamento_id, inicio_hora, fim_hora, prioridade, tipo_janela) VALUES (:equipamento_id, :inicio, :fim, :prioridade, :tipo)"
+                        ),
+                        janela_payload,
+                    )
 
     def salvar_perfil_consumo(self, perfil: PerfilConsumo) -> int:
         payload = json.dumps(asdict(perfil), ensure_ascii=False)
