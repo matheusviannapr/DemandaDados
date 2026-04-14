@@ -4,7 +4,7 @@ import pandas as pd
 import re
 import random
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 from packaging import version
 import copy
 import io
@@ -319,6 +319,7 @@ else:
 
 # --- Núcleo de simulação ---
 IntervalType = Union[List[Tuple[int, int]], Callable[[], List[Tuple[int, int]]]]
+ESTACOES_ANO = ["verão", "outono", "inverno", "primavera"]
 
 
 def parse_time(time_str: str) -> int:
@@ -633,6 +634,49 @@ def cria_comodos_individualizados(comodos: List[Comodo], instancias_por_comodo: 
                 )
             comodos_individualizados.append(Comodo(nome=f"{comodo.nome}.{i+1}", equipamentos=equipamentos_copia))
     return comodos_individualizados
+
+
+def listar_equipamentos(comodos: List[Comodo]) -> List[dict]:
+    """Lista equipamentos por cômodo, preservando a estrutura atual do app."""
+    equipamentos = []
+    for comodo in comodos:
+        for eq in comodo.equipamentos:
+            equipamentos.append(
+                {
+                    "id": f"{comodo.nome}::{eq.nome}",
+                    "comodo": comodo.nome,
+                    "equipamento": eq.nome,
+                }
+            )
+    return equipamentos
+
+
+def aplicar_ajuste_sazonal(
+    comodos: List[Comodo],
+    ajustes_sazonais: Dict[str, dict],
+    estacao: str,
+) -> List[Comodo]:
+    """
+    Retorna uma cópia dos cômodos com ajuste sazonal aplicado.
+    Nesta v1, o fator sazonal é aplicado sobre a intensidade (fator_demanda).
+    """
+    comodos_sazonais = copy.deepcopy(comodos)
+
+    for comodo in comodos_sazonais:
+        for eq in comodo.equipamentos:
+            chave_eq = f"{comodo.nome}::{eq.nome}"
+            ajuste_eq = ajustes_sazonais.get(chave_eq, {})
+            if not ajuste_eq.get("ativo", False):
+                continue
+
+            percentual = float(ajuste_eq.get(estacao, 0.0))
+            multiplicador = 1.0 + (percentual / 100.0)
+            multiplicador = max(0.0, multiplicador)
+
+            # Aplicação explícita da sazonalidade na simulação.
+            eq.fator_demanda *= multiplicador
+
+    return comodos_sazonais
 
 
 def simula_carga_total(
@@ -1672,8 +1716,53 @@ else:  # Entrada direta de dados
 
 # Continua apenas se houver cômodos carregados
 if "comodos" in st.session_state and st.session_state.comodos:
+    # Seção 2: Ajuste sazonal por estação
+    st.header("🌦️ Ajuste sazonal por estação")
+
+    equipamentos_disponiveis = listar_equipamentos(st.session_state.comodos)
+    if "ajustes_sazonais" not in st.session_state:
+        st.session_state.ajustes_sazonais = {}
+
+    # Mantém o estado coerente com os equipamentos carregados no momento
+    ids_atuais = {item["id"] for item in equipamentos_disponiveis}
+    st.session_state.ajustes_sazonais = {
+        eq_id: dados for eq_id, dados in st.session_state.ajustes_sazonais.items() if eq_id in ids_atuais
+    }
+
+    with st.expander("Configurar sazonalidade por equipamento", expanded=False):
+        st.caption(
+            "Selecione os equipamentos que terão ajuste sazonal e informe os percentuais por estação. "
+            "Ex.: +30% (multiplicador 1.30), -20% (multiplicador 0.80)."
+        )
+
+        for idx, item in enumerate(equipamentos_disponiveis):
+            eq_id = item["id"]
+            ajuste_atual = st.session_state.ajustes_sazonais.get(eq_id, {})
+            ativo_inicial = bool(ajuste_atual.get("ativo", False))
+            ativo = st.checkbox(
+                f"{item['comodo']} → {item['equipamento']}",
+                value=ativo_inicial,
+                key=f"sazonal_chk_{idx}_{eq_id}",
+            )
+
+            if ativo:
+                c1, c2, c3, c4 = st.columns(4)
+                val_verao = c1.number_input("Verão (%)", value=float(ajuste_atual.get("verão", 0.0)), step=5.0, key=f"sazonal_verao_{idx}_{eq_id}")
+                val_outono = c2.number_input("Outono (%)", value=float(ajuste_atual.get("outono", 0.0)), step=5.0, key=f"sazonal_outono_{idx}_{eq_id}")
+                val_inverno = c3.number_input("Inverno (%)", value=float(ajuste_atual.get("inverno", 0.0)), step=5.0, key=f"sazonal_inverno_{idx}_{eq_id}")
+                val_primavera = c4.number_input("Primavera (%)", value=float(ajuste_atual.get("primavera", 0.0)), step=5.0, key=f"sazonal_primavera_{idx}_{eq_id}")
+
+                st.session_state.ajustes_sazonais[eq_id] = {
+                    "ativo": True,
+                    "verão": float(val_verao),
+                    "outono": float(val_outono),
+                    "inverno": float(val_inverno),
+                    "primavera": float(val_primavera),
+                }
+            else:
+                st.session_state.ajustes_sazonais[eq_id] = {"ativo": False}
     
-    # Seção 2: Parâmetros de Simulação
+    # Seção 3: Parâmetros de Simulação
     st.header("🎯 Parâmetros de Simulação")
     
     col1, col2 = st.columns(2)
@@ -1698,7 +1787,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
             help="1440 minutos = 24 horas (1 dia completo)"
         )
     
-    # Seção 3: Instâncias por Cômodo
+    # Seção 4: Instâncias por Cômodo
     st.header("🏠 Instâncias por Cômodo")
     
     instancias_por_comodo = {}
@@ -1719,47 +1808,119 @@ if "comodos" in st.session_state and st.session_state.comodos:
                 key=f"inst_{comodo.nome}"
             )
     
-    # Seção 4: Executar Simulação
+    # Seção 5: Executar Simulação
     st.header("🚀 Executar Simulação")
     
     if st.button("🚀 Executar Simulação Monte Carlo", type="primary", width="stretch"):
         with st.spinner("Executando simulação Monte Carlo..."):
-            # Executa a simulação principal
-            picos, perfis, consumos, detalhes_pico = simula_carga_total(
-                st.session_state.comodos,
-                instancias_por_comodo,
-                num_simulacoes=num_simulacoes,
-                tempo_total=tempo_total,
-                coletar_detalhes_pico=True
-            )
+            resultados_estacoes = {}
+            for estacao in ESTACOES_ANO:
+                comodos_sazonais = aplicar_ajuste_sazonal(
+                    st.session_state.comodos,
+                    st.session_state.ajustes_sazonais,
+                    estacao,
+                )
+                picos, perfis, consumos, detalhes_pico = simula_carga_total(
+                    comodos_sazonais,
+                    instancias_por_comodo,
+                    num_simulacoes=num_simulacoes,
+                    tempo_total=tempo_total,
+                    coletar_detalhes_pico=True
+                )
+                resultados_estacoes[estacao] = {
+                    "picos": picos,
+                    "perfis": perfis,
+                    "consumos": consumos,
+                    "detalhes_pico": detalhes_pico,
+                }
             
             # Armazena os resultados no session_state
             st.session_state.resultados = {
-                "picos": picos,
-                "perfis": perfis,
-                "consumos": consumos,
-                "detalhes_pico": detalhes_pico,
+                "resultados_estacoes": resultados_estacoes,
                 "instancias_por_comodo": instancias_por_comodo,
                 "num_simulacoes": num_simulacoes,
-                "tempo_total": tempo_total
+                "tempo_total": tempo_total,
+                "ajustes_sazonais": copy.deepcopy(st.session_state.ajustes_sazonais),
             }
         
-        st.success("✅ Simulação concluída!")
+        st.success("✅ Simulação sazonal concluída para as 4 estações!")
     
-    # Seção 5: Resultados (exibidos abaixo se disponíveis)
+    # Seção 6: Resultados (exibidos abaixo se disponíveis)
     if "resultados" in st.session_state:
         st.header("📊 Resultados da Simulação")
         
         resultados = st.session_state.resultados
-        picos = resultados["picos"]
-        perfis = resultados["perfis"]
-        consumos = resultados["consumos"]
+        resultados_estacoes = resultados["resultados_estacoes"]
+        estacao_detalhe = st.selectbox("Estação para análise detalhada:", ESTACOES_ANO, index=0)
+
+        picos = resultados_estacoes[estacao_detalhe]["picos"]
+        perfis = resultados_estacoes[estacao_detalhe]["perfis"]
+        consumos = resultados_estacoes[estacao_detalhe]["consumos"]
+
+        resumo_estacoes = []
+        for estacao in ESTACOES_ANO:
+            dados_estacao = resultados_estacoes[estacao]
+            perfil_medio_estacao = np.mean(dados_estacao["perfis"], axis=0)
+            consumo_medio_kwh = float(np.mean(dados_estacao["consumos"]))
+            resumo_estacoes.append(
+                {
+                    "Estação": estacao.capitalize(),
+                    "Demanda média (W)": float(np.mean(perfil_medio_estacao)),
+                    "Gasto energético médio (kWh)": consumo_medio_kwh,
+                    "Pico médio (W)": float(np.mean(dados_estacao["picos"])),
+                }
+            )
+
+        df_resumo_estacoes = pd.DataFrame(resumo_estacoes)
+        st.subheader("📋 Resumo comparativo por estação")
+        st.dataframe(df_resumo_estacoes, hide_index=True, width="stretch")
+
+        col_comp1, col_comp2 = st.columns(2)
+        with col_comp1:
+            st.subheader("Demanda média por estação")
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(df_resumo_estacoes["Estação"], df_resumo_estacoes["Demanda média (W)"], color="#3498db")
+            ax.set_ylabel("Demanda média (W)")
+            ax.grid(True, axis="y", alpha=0.3)
+            st.pyplot(fig)
+        with col_comp2:
+            st.subheader("Gasto energético médio por estação")
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(df_resumo_estacoes["Estação"], df_resumo_estacoes["Gasto energético médio (kWh)"], color="#16a085")
+            ax.set_ylabel("Gasto energético médio (kWh)")
+            ax.grid(True, axis="y", alpha=0.3)
+            st.pyplot(fig)
+
+        st.subheader("📈 Curvas típicas de demanda por estação")
+        horas = np.arange(tempo_total) / 60.0
+        fig, ax = plt.subplots(figsize=(12, 5))
+        for estacao in ESTACOES_ANO:
+            perfil_medio_estacao = np.mean(resultados_estacoes[estacao]["perfis"], axis=0)
+            ax.plot(horas, perfil_medio_estacao, linewidth=2, label=estacao.capitalize())
+        ax.set_xlabel("Hora do Dia")
+        ax.set_ylabel("Carga média (W)")
+        ax.set_title("Curva típica de demanda por estação")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        st.pyplot(fig)
+
+        st.info(
+            f"Análise detalhada abaixo referente à estação: **{estacao_detalhe.capitalize()}**. "
+            "A energia média foi calculada por simulação como soma de potência no tempo "
+            "(W por minuto), convertida para kWh."
+        )
         
         # Estatísticas dos picos
         pico_medio = np.mean(picos)
         pico_max = np.max(picos)
         pico_min = np.min(picos)
         pico_95 = np.percentile(picos, 95)
+        resultados_estacao_atual = {
+            "picos": picos,
+            "perfis": perfis,
+            "consumos": consumos,
+            "detalhes_pico": resultados_estacoes[estacao_detalhe].get("detalhes_pico"),
+        }
         
         # Botões para geração de relatórios
         col_relatorio1, col_relatorio2, col_relatorio3 = st.columns([2, 1, 1])
@@ -1779,7 +1940,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                     )
 
                     pdf_data = gerar_pdf_relatorio(
-                        resultados,
+                        resultados_estacao_atual,
                         instancias_por_comodo,
                         num_simulacoes,
                         tempo_total,
@@ -1808,7 +1969,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                     )
 
                     zip_data = gerar_zip_relatorio_latex(
-                        resultados,
+                        resultados_estacao_atual,
                         instancias_por_comodo,
                         num_simulacoes,
                         tempo_total,
@@ -1841,7 +2002,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
         with col4:
             st.metric("Percentil 95", f" {pico_95:.0f} W")
 
-        detalhes_pico = resultados.get("detalhes_pico")
+        detalhes_pico = resultados_estacoes[estacao_detalhe].get("detalhes_pico")
         if detalhes_pico:
             st.markdown("---")
             st.subheader("🔎 Exemplo concreto: equipamentos ligados no Pico Médio e no P95")
