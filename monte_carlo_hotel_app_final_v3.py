@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import runpy
+from pathlib import Path
+
 import streamlit as st
 
 from app.db.database import get_engine
@@ -10,17 +13,25 @@ st.set_page_config(page_title="Demanda e Dádio", page_icon="📈", layout="wide
 if "repo" not in st.session_state:
     st.session_state.repo = Repository(get_engine())
 
+PAGES = {
+    "🏠 Início": None,
+    "1) Upload e cenário": "01_upload_e_cenario.py",
+    "2) Equipamentos": "02_equipamentos.py",
+    "3) Perfis": "03_perfis.py",
+    "4) Sazonalidade": "04_sazonalidade.py",
+    "5) Simulação": "05_simulacao.py",
+    "6) Resultados": "06_resultados.py",
+    "7) Banco e configurações": "07_banco_e_configuracoes.py",
+}
+
+st.sidebar.title("Navegação")
+selected_page = st.sidebar.radio("Ir para", list(PAGES.keys()), index=0)
+
 st.title("Demanda e Dádio")
 st.write("Plataforma de modelagem e simulação de demanda elétrica.")
-st.info("Se o menu lateral não aparecer, use os botões abaixo para abrir cada etapa.")
 
-st.subheader("Fluxo rápido")
-col1, col2, col3 = st.columns(3)
-col1.page_link("pages/01_upload_e_cenario.py", label="1) Upload e cenário", icon="📥")
-col1.page_link("pages/02_equipamentos.py", label="2) Equipamentos", icon="🧰")
-col2.page_link("pages/03_perfis.py", label="3) Perfis", icon="🗂️")
-col2.page_link("pages/04_sazonalidade.py", label="4) Sazonalidade", icon="🌦️")
-col3.page_link("pages/05_simulacao.py", label="5) Simulação", icon="⚙️")
-col3.page_link("pages/06_resultados.py", label="6) Resultados", icon="📊")
-
-st.page_link("pages/07_banco_e_configuracoes.py", label="7) Banco e configurações", icon="🗄️")
+if PAGES[selected_page] is None:
+    st.info("Escolha uma etapa no menu da barra lateral para continuar o fluxo.")
+else:
+    target = Path(__file__).resolve().parent / "app" / "pages" / PAGES[selected_page]
+    runpy.run_path(str(target))
