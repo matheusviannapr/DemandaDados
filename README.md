@@ -44,3 +44,8 @@ python -m app.db.seed
 
 
 A navegação agora é feita por um menu de etapas na barra lateral (radio), sem depender de `st.page_link`.
+
+## Modelo padrão para onboarding
+
+Na página **Upload e cenário**, existe a opção **Criar cenário com modelo padrão**.
+Ela gera automaticamente um cenário de exemplo (hotel) para o usuário entender rapidamente o fluxo completo de uso do software.
