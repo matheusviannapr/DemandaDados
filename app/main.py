@@ -33,5 +33,5 @@ st.write("Plataforma de modelagem e simulação de demanda elétrica.")
 if PAGES[selected_page] is None:
     st.info("Escolha uma etapa no menu da barra lateral para continuar o fluxo.")
 else:
-    target = Path(__file__).resolve().parent / "app" / "pages" / PAGES[selected_page]
+    target = Path(__file__).resolve().parent / "pages" / PAGES[selected_page]
     runpy.run_path(str(target))
