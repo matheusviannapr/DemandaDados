@@ -12,7 +12,7 @@ if "repo" not in st.session_state:
 
 st.title("Demanda e Dádio")
 st.write("Plataforma de modelagem e simulação de demanda elétrica.")
-st.info("Se o menu lateral não aparecer, use os botões abaixo para abrir cada etapa.")
+st.info("Use o menu lateral ou os atalhos abaixo para navegar pelo fluxo completo.")
 
 st.subheader("Fluxo rápido")
 col1, col2, col3 = st.columns(3)
