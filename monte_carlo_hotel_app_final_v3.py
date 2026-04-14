@@ -4,12 +4,12 @@ import pandas as pd
 import re
 import random
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 from packaging import version
 import copy
 import io
 import base64
-from datetime import datetime
+from datetime import datetime, time
 from fpdf import FPDF
 from PIL import Image
 import os
@@ -319,6 +319,7 @@ else:
 
 # --- Núcleo de simulação ---
 IntervalType = Union[List[Tuple[int, int]], Callable[[], List[Tuple[int, int]]]]
+ESTACOES_ANO = ["verão", "outono", "inverno", "primavera"]
 
 
 def parse_time(time_str: str) -> int:
@@ -635,6 +636,49 @@ def cria_comodos_individualizados(comodos: List[Comodo], instancias_por_comodo: 
     return comodos_individualizados
 
 
+def listar_equipamentos(comodos: List[Comodo]) -> List[dict]:
+    """Lista equipamentos por cômodo, preservando a estrutura atual do app."""
+    equipamentos = []
+    for comodo in comodos:
+        for eq in comodo.equipamentos:
+            equipamentos.append(
+                {
+                    "id": f"{comodo.nome}::{eq.nome}",
+                    "comodo": comodo.nome,
+                    "equipamento": eq.nome,
+                }
+            )
+    return equipamentos
+
+
+def aplicar_ajuste_sazonal(
+    comodos: List[Comodo],
+    ajustes_sazonais: Dict[str, dict],
+    estacao: str,
+) -> List[Comodo]:
+    """
+    Retorna uma cópia dos cômodos com ajuste sazonal aplicado.
+    Nesta v1, o fator sazonal é aplicado sobre a intensidade (fator_demanda).
+    """
+    comodos_sazonais = copy.deepcopy(comodos)
+
+    for comodo in comodos_sazonais:
+        for eq in comodo.equipamentos:
+            chave_eq = f"{comodo.nome}::{eq.nome}"
+            ajuste_eq = ajustes_sazonais.get(chave_eq, {})
+            if not ajuste_eq.get("ativo", False):
+                continue
+
+            percentual = float(ajuste_eq.get(estacao, 0.0))
+            multiplicador = 1.0 + (percentual / 100.0)
+            multiplicador = max(0.0, multiplicador)
+
+            # Aplicação explícita da sazonalidade na simulação.
+            eq.fator_demanda *= multiplicador
+
+    return comodos_sazonais
+
+
 def simula_carga_total(
     comodos: List[Comodo],
     instancias_por_comodo: dict,
@@ -687,6 +731,62 @@ def simula_carga_total(
             )
 
     return np.array(picos), np.array(perfis), np.array(consumos_diarios), detalhes_pico
+
+
+def _tempo_para_minutos(valor_tempo: time) -> int:
+    return int(valor_tempo.hour) * 60 + int(valor_tempo.minute)
+
+
+def _mascara_horario_ponta(tempo_total: int, inicio_ponta_min: int, fim_ponta_min: int) -> np.ndarray:
+    """Cria máscara booleana por ponto da curva (True = ponta)."""
+    minutos_do_dia = np.arange(tempo_total) % 1440
+
+    if inicio_ponta_min == fim_ponta_min:
+        return np.zeros(tempo_total, dtype=bool)
+
+    if inicio_ponta_min < fim_ponta_min:
+        return (minutos_do_dia >= inicio_ponta_min) & (minutos_do_dia < fim_ponta_min)
+
+    # Caso ponta atravesse meia-noite (ex.: 22:00 às 01:00)
+    return (minutos_do_dia >= inicio_ponta_min) | (minutos_do_dia < fim_ponta_min)
+
+
+def calcular_indicadores_ponta_fora(
+    perfis: np.ndarray,
+    tempo_total: int,
+    inicio_ponta_min: int,
+    fim_ponta_min: int,
+) -> dict:
+    """
+    Calcula indicadores a partir da curva típica (perfil médio).
+    Energia em kWh: soma(Potência_W * Δt_h) / 1000.
+    """
+    perfil_medio = np.mean(perfis, axis=0)
+    mascara_ponta = _mascara_horario_ponta(tempo_total, inicio_ponta_min, fim_ponta_min)
+    mascara_fora = ~mascara_ponta
+    delta_t_h = 1.0 / 60.0  # passo da simulação em minutos
+
+    demanda_media_total = float(np.mean(perfil_medio))
+    demanda_media_ponta = float(np.mean(perfil_medio[mascara_ponta])) if np.any(mascara_ponta) else 0.0
+    demanda_media_fora = float(np.mean(perfil_medio[mascara_fora])) if np.any(mascara_fora) else 0.0
+
+    demanda_max_ponta = float(np.max(perfil_medio[mascara_ponta])) if np.any(mascara_ponta) else 0.0
+    demanda_max_fora = float(np.max(perfil_medio[mascara_fora])) if np.any(mascara_fora) else 0.0
+
+    energia_total = float(np.sum(perfil_medio) * delta_t_h / 1000.0)
+    energia_ponta = float(np.sum(perfil_medio[mascara_ponta]) * delta_t_h / 1000.0) if np.any(mascara_ponta) else 0.0
+    energia_fora = float(np.sum(perfil_medio[mascara_fora]) * delta_t_h / 1000.0) if np.any(mascara_fora) else 0.0
+
+    return {
+        "demanda_media_total_w": demanda_media_total,
+        "demanda_media_ponta_w": demanda_media_ponta,
+        "demanda_media_fora_w": demanda_media_fora,
+        "demanda_max_ponta_w": demanda_max_ponta,
+        "demanda_max_fora_w": demanda_max_fora,
+        "energia_total_kwh": energia_total,
+        "energia_ponta_kwh": energia_ponta,
+        "energia_fora_kwh": energia_fora,
+    }
 
 
 # Função para salvar gráficos como imagens
@@ -870,6 +970,19 @@ def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes,
     desvio_padrao = np.std(picos)
     coef_variacao = (desvio_padrao / pico_medio) * 100 if pico_medio > 0 else 0
     consumo_medio = np.mean(consumos)
+    inicio_ponta_min = int(resultados.get("inicio_ponta_min", 18 * 60))
+    fim_ponta_min = int(resultados.get("fim_ponta_min", 21 * 60))
+    estacao_referencia = str(resultados.get("estacao_referencia", "N/A"))
+    resumo_estacoes = resultados.get("resumo_estacoes")
+
+    indicadores_ponta_fora = calcular_indicadores_ponta_fora(
+        perfis,
+        tempo_total,
+        inicio_ponta_min,
+        fim_ponta_min,
+    )
+    hora_inicio_ponta_txt = f"{inicio_ponta_min // 60:02d}:{inicio_ponta_min % 60:02d}"
+    hora_fim_ponta_txt = f"{fim_ponta_min // 60:02d}:{fim_ponta_min % 60:02d}"
 
     media_por_minuto = np.mean(perfis, axis=0)
     fator_carga_medio = (np.mean(media_por_minuto) / np.max(media_por_minuto)) * 100 if np.max(media_por_minuto) > 0 else 0
@@ -962,6 +1075,30 @@ Equipamento & Potência (W) & Qtde & Prob. & Fator Demanda & Intervalos \\
                             + "\\end{itemize}"
                         )
         configuracao_manual = "\n".join(blocos_man)
+
+    secao_comparativo_estacoes = ""
+    if resumo_estacoes:
+        linhas_estacoes = []
+        for item in resumo_estacoes:
+            linhas_estacoes.append(
+                f"{escapar_latex(str(item.get('Estação', 'N/A')))} & "
+                f"{float(item.get('Demanda média (W)', 0.0)):.2f} & "
+                f"{float(item.get('Gasto energético médio (kWh)', 0.0)):.2f} & "
+                f"{float(item.get('Demanda média ponta (W)', 0.0)):.2f} & "
+                f"{float(item.get('Demanda média fora ponta (W)', 0.0)):.2f} & "
+                f"{float(item.get('Energia ponta (kWh)', 0.0)):.2f} & "
+                f"{float(item.get('Energia fora ponta (kWh)', 0.0)):.2f} \\\\"
+            )
+        secao_comparativo_estacoes = fr"""
+\section*{{4. Comparativo Sazonal por Estação}}
+\begin{{longtable}}{{p{{2.2cm}}rrrrrr}}
+\toprule
+Estação & Dem. média (W) & Energia média (kWh) & Dem. ponta (W) & Dem. fora (W) & En. ponta (kWh) & En. fora (kWh) \\
+\midrule
+{chr(10).join(linhas_estacoes)}
+\bottomrule
+\end{{longtable}}
+"""
 
 
     detalhes_pico = resultados.get("detalhes_pico")
@@ -1092,14 +1229,38 @@ Uma característica fundamental desta simulação é o tratamento individualizad
     \end{{tabular}}
 \end{{table}}
 
-\section*{{4. Análise Gráfica da Demanda}}
+\section*{{3.1 Indicadores de Ponta e Fora de Ponta}}
+Estação de referência do relatório: \textbf{{{escapar_latex(estacao_referencia)}}}.\\
+Intervalo de ponta considerado: \textbf{{{hora_inicio_ponta_txt} às {hora_fim_ponta_txt}}}. Todo o restante do período é classificado como fora de ponta.
+
+\begin{{table}}[H]
+    \centering
+    \begin{{tabular}}{{lr}}
+        \toprule
+        Indicador & Valor \\
+        \midrule
+        Demanda média total & {indicadores_ponta_fora['demanda_media_total_w']:.2f} W \\
+        Demanda média na ponta & {indicadores_ponta_fora['demanda_media_ponta_w']:.2f} W \\
+        Demanda média fora de ponta & {indicadores_ponta_fora['demanda_media_fora_w']:.2f} W \\
+        Demanda máxima na ponta & {indicadores_ponta_fora['demanda_max_ponta_w']:.2f} W \\
+        Demanda máxima fora de ponta & {indicadores_ponta_fora['demanda_max_fora_w']:.2f} W \\
+        Energia total & {indicadores_ponta_fora['energia_total_kwh']:.2f} kWh \\
+        Energia na ponta & {indicadores_ponta_fora['energia_ponta_kwh']:.2f} kWh \\
+        Energia fora de ponta & {indicadores_ponta_fora['energia_fora_kwh']:.2f} kWh \\
+        \bottomrule
+    \end{{tabular}}
+\end{{table}}
+
+{secao_comparativo_estacoes}
+
+\section*{{5. Análise Gráfica da Demanda}}
 Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da demanda elétrica do estabelecimento, permitindo uma compreensão abrangente dos padrões de consumo e suas implicações para o dimensionamento da infraestrutura.
 {''.join(secoes_graficos)}
 
-\section*{{5. Exemplos Concretos de Equipamentos Ligados nos Picos}}
+\section*{{6. Exemplos Concretos de Equipamentos Ligados nos Picos}}
 {exemplos_pico_tex}
 
-\section*{{6. Análise Estatística Avançada}}
+\section*{{7. Análise Estatística Avançada}}
 \begin{{itemize}}
     \item Desvio padrão dos picos: {desvio_padrao:.2f} W
     \item Coeficiente de variação: {coef_variacao:.2f}\% ({escapar_latex(interpretacao_diversidade)})
@@ -1110,7 +1271,7 @@ Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da de
     \item Densidade de carga: {(pico_medio / sum(instancias_por_comodo.values())):.2f} W/unidade
 \end{{itemize}}
 
-\section*{{7. Recomendações Técnicas para Dimensionamento}}
+\section*{{8. Recomendações Técnicas para Dimensionamento}}
 \begin{{itemize}}
     \item Capacidade recomendada para transformadores: {capacidade_recomendada:.0f} W (P95 + 20\% de margem de segurança).
     \item Dimensionamento de condutores: considerar fatores de correção por temperatura e agrupamento conforme NBR 5410.
@@ -1118,7 +1279,7 @@ Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da de
     \item Fator de demanda global de referência: {(pico_95 / (pico_medio * 1.2)):.4f}.
 \end{{itemize}}
 
-\section*{{8. Conclusões e Considerações Finais}}
+\section*{{9. Conclusões e Considerações Finais}}
 A simulação Monte Carlo realizada com {num_simulacoes:,} cenários independentes fornece uma base estatisticamente robusta para o dimensionamento da infraestrutura elétrica do estabelecimento hoteleiro. A metodologia de instâncias individualizadas permite capturar adequadamente o fator de diversidade, resultando em dimensionamentos mais precisos e economicamente otimizados.
 
 Os resultados apresentados baseiam-se nas configurações de equipamentos e padrões de uso fornecidos. Mudanças significativas no perfil de ocupação, introdução de novos tipos de equipamentos ou alterações nos hábitos dos usuários podem impactar os resultados e requerem reavaliação da simulação.
@@ -1672,8 +1833,53 @@ else:  # Entrada direta de dados
 
 # Continua apenas se houver cômodos carregados
 if "comodos" in st.session_state and st.session_state.comodos:
+    # Seção 2: Ajuste sazonal por estação
+    st.header("🌦️ Ajuste sazonal por estação")
+
+    equipamentos_disponiveis = listar_equipamentos(st.session_state.comodos)
+    if "ajustes_sazonais" not in st.session_state:
+        st.session_state.ajustes_sazonais = {}
+
+    # Mantém o estado coerente com os equipamentos carregados no momento
+    ids_atuais = {item["id"] for item in equipamentos_disponiveis}
+    st.session_state.ajustes_sazonais = {
+        eq_id: dados for eq_id, dados in st.session_state.ajustes_sazonais.items() if eq_id in ids_atuais
+    }
+
+    with st.expander("Configurar sazonalidade por equipamento", expanded=False):
+        st.caption(
+            "Selecione os equipamentos que terão ajuste sazonal e informe os percentuais por estação. "
+            "Ex.: +30% (multiplicador 1.30), -20% (multiplicador 0.80)."
+        )
+
+        for idx, item in enumerate(equipamentos_disponiveis):
+            eq_id = item["id"]
+            ajuste_atual = st.session_state.ajustes_sazonais.get(eq_id, {})
+            ativo_inicial = bool(ajuste_atual.get("ativo", False))
+            ativo = st.checkbox(
+                f"{item['comodo']} → {item['equipamento']}",
+                value=ativo_inicial,
+                key=f"sazonal_chk_{idx}_{eq_id}",
+            )
+
+            if ativo:
+                c1, c2, c3, c4 = st.columns(4)
+                val_verao = c1.number_input("Verão (%)", value=float(ajuste_atual.get("verão", 0.0)), step=5.0, key=f"sazonal_verao_{idx}_{eq_id}")
+                val_outono = c2.number_input("Outono (%)", value=float(ajuste_atual.get("outono", 0.0)), step=5.0, key=f"sazonal_outono_{idx}_{eq_id}")
+                val_inverno = c3.number_input("Inverno (%)", value=float(ajuste_atual.get("inverno", 0.0)), step=5.0, key=f"sazonal_inverno_{idx}_{eq_id}")
+                val_primavera = c4.number_input("Primavera (%)", value=float(ajuste_atual.get("primavera", 0.0)), step=5.0, key=f"sazonal_primavera_{idx}_{eq_id}")
+
+                st.session_state.ajustes_sazonais[eq_id] = {
+                    "ativo": True,
+                    "verão": float(val_verao),
+                    "outono": float(val_outono),
+                    "inverno": float(val_inverno),
+                    "primavera": float(val_primavera),
+                }
+            else:
+                st.session_state.ajustes_sazonais[eq_id] = {"ativo": False}
     
-    # Seção 2: Parâmetros de Simulação
+    # Seção 3: Parâmetros de Simulação
     st.header("🎯 Parâmetros de Simulação")
     
     col1, col2 = st.columns(2)
@@ -1697,8 +1903,32 @@ if "comodos" in st.session_state and st.session_state.comodos:
             step=60,
             help="1440 minutos = 24 horas (1 dia completo)"
         )
+
+    st.subheader("⏱️ Configuração de horário de ponta")
+    col_ponta_1, col_ponta_2 = st.columns(2)
+    with col_ponta_1:
+        hora_inicio_ponta = st.time_input(
+            "Início da ponta",
+            value=time(18, 0),
+            step=3600,
+            help="Horário inicial considerado como ponta."
+        )
+    with col_ponta_2:
+        hora_fim_ponta = st.time_input(
+            "Fim da ponta",
+            value=time(21, 0),
+            step=3600,
+            help="Horário final da ponta. Todo o restante será fora de ponta."
+        )
+
+    inicio_ponta_min = _tempo_para_minutos(hora_inicio_ponta)
+    fim_ponta_min = _tempo_para_minutos(hora_fim_ponta)
+    st.caption(
+        f"Intervalo de ponta configurado: **{hora_inicio_ponta.strftime('%H:%M')} às {hora_fim_ponta.strftime('%H:%M')}**. "
+        "Os demais horários são classificados como fora de ponta."
+    )
     
-    # Seção 3: Instâncias por Cômodo
+    # Seção 4: Instâncias por Cômodo
     st.header("🏠 Instâncias por Cômodo")
     
     instancias_por_comodo = {}
@@ -1719,47 +1949,166 @@ if "comodos" in st.session_state and st.session_state.comodos:
                 key=f"inst_{comodo.nome}"
             )
     
-    # Seção 4: Executar Simulação
+    # Seção 5: Executar Simulação
     st.header("🚀 Executar Simulação")
     
     if st.button("🚀 Executar Simulação Monte Carlo", type="primary", width="stretch"):
         with st.spinner("Executando simulação Monte Carlo..."):
-            # Executa a simulação principal
-            picos, perfis, consumos, detalhes_pico = simula_carga_total(
-                st.session_state.comodos,
-                instancias_por_comodo,
-                num_simulacoes=num_simulacoes,
-                tempo_total=tempo_total,
-                coletar_detalhes_pico=True
-            )
+            resultados_estacoes = {}
+            for estacao in ESTACOES_ANO:
+                comodos_sazonais = aplicar_ajuste_sazonal(
+                    st.session_state.comodos,
+                    st.session_state.ajustes_sazonais,
+                    estacao,
+                )
+                picos, perfis, consumos, detalhes_pico = simula_carga_total(
+                    comodos_sazonais,
+                    instancias_por_comodo,
+                    num_simulacoes=num_simulacoes,
+                    tempo_total=tempo_total,
+                    coletar_detalhes_pico=True
+                )
+                resultados_estacoes[estacao] = {
+                    "picos": picos,
+                    "perfis": perfis,
+                    "consumos": consumos,
+                    "detalhes_pico": detalhes_pico,
+                }
             
             # Armazena os resultados no session_state
             st.session_state.resultados = {
-                "picos": picos,
-                "perfis": perfis,
-                "consumos": consumos,
-                "detalhes_pico": detalhes_pico,
+                "resultados_estacoes": resultados_estacoes,
                 "instancias_por_comodo": instancias_por_comodo,
                 "num_simulacoes": num_simulacoes,
-                "tempo_total": tempo_total
+                "tempo_total": tempo_total,
+                "ajustes_sazonais": copy.deepcopy(st.session_state.ajustes_sazonais),
+                "inicio_ponta_min": inicio_ponta_min,
+                "fim_ponta_min": fim_ponta_min,
             }
         
-        st.success("✅ Simulação concluída!")
+        st.success("✅ Simulação sazonal concluída para as 4 estações!")
     
-    # Seção 5: Resultados (exibidos abaixo se disponíveis)
+    # Seção 6: Resultados (exibidos abaixo se disponíveis)
     if "resultados" in st.session_state:
         st.header("📊 Resultados da Simulação")
         
         resultados = st.session_state.resultados
-        picos = resultados["picos"]
-        perfis = resultados["perfis"]
-        consumos = resultados["consumos"]
+        resultados_estacoes = resultados["resultados_estacoes"]
+        inicio_ponta_min = resultados.get("inicio_ponta_min", 18 * 60)
+        fim_ponta_min = resultados.get("fim_ponta_min", 21 * 60)
+        estacao_detalhe = st.selectbox("Estação para análise detalhada:", ESTACOES_ANO, index=0)
+
+        picos = resultados_estacoes[estacao_detalhe]["picos"]
+        perfis = resultados_estacoes[estacao_detalhe]["perfis"]
+        consumos = resultados_estacoes[estacao_detalhe]["consumos"]
+
+        resumo_estacoes = []
+        for estacao in ESTACOES_ANO:
+            dados_estacao = resultados_estacoes[estacao]
+            perfil_medio_estacao = np.mean(dados_estacao["perfis"], axis=0)
+            consumo_medio_kwh = float(np.mean(dados_estacao["consumos"]))
+            indicadores_tarifarios = calcular_indicadores_ponta_fora(
+                dados_estacao["perfis"],
+                tempo_total,
+                inicio_ponta_min,
+                fim_ponta_min,
+            )
+            resumo_estacoes.append(
+                {
+                    "Estação": estacao.capitalize(),
+                    "Demanda média (W)": float(np.mean(perfil_medio_estacao)),
+                    "Gasto energético médio (kWh)": consumo_medio_kwh,
+                    "Pico médio (W)": float(np.mean(dados_estacao["picos"])),
+                    "Demanda média ponta (W)": indicadores_tarifarios["demanda_media_ponta_w"],
+                    "Demanda média fora ponta (W)": indicadores_tarifarios["demanda_media_fora_w"],
+                    "Energia ponta (kWh)": indicadores_tarifarios["energia_ponta_kwh"],
+                    "Energia fora ponta (kWh)": indicadores_tarifarios["energia_fora_kwh"],
+                }
+            )
+
+        df_resumo_estacoes = pd.DataFrame(resumo_estacoes)
+        st.subheader("📋 Resumo comparativo por estação")
+        st.dataframe(df_resumo_estacoes, hide_index=True, width="stretch")
+
+        col_comp1, col_comp2 = st.columns(2)
+        with col_comp1:
+            st.subheader("Demanda média por estação")
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(df_resumo_estacoes["Estação"], df_resumo_estacoes["Demanda média (W)"], color="#3498db")
+            ax.set_ylabel("Demanda média (W)")
+            ax.grid(True, axis="y", alpha=0.3)
+            st.pyplot(fig)
+        with col_comp2:
+            st.subheader("Gasto energético médio por estação")
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(df_resumo_estacoes["Estação"], df_resumo_estacoes["Gasto energético médio (kWh)"], color="#16a085")
+            ax.set_ylabel("Gasto energético médio (kWh)")
+            ax.grid(True, axis="y", alpha=0.3)
+            st.pyplot(fig)
+
+        st.subheader("📈 Curvas típicas de demanda por estação")
+        horas = np.arange(tempo_total) / 60.0
+        fig, ax = plt.subplots(figsize=(12, 5))
+        for estacao in ESTACOES_ANO:
+            perfil_medio_estacao = np.mean(resultados_estacoes[estacao]["perfis"], axis=0)
+            ax.plot(horas, perfil_medio_estacao, linewidth=2, label=estacao.capitalize())
+        ax.set_xlabel("Hora do Dia")
+        ax.set_ylabel("Carga média (W)")
+        ax.set_title("Curva típica de demanda por estação")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        st.pyplot(fig)
+
+        st.info(
+            f"Análise detalhada abaixo referente à estação: **{estacao_detalhe.capitalize()}**. "
+            "A energia média foi calculada por simulação como soma de potência no tempo "
+            "(W por minuto), convertida para kWh."
+        )
+
+        indicadores_ponta = calcular_indicadores_ponta_fora(
+            perfis,
+            tempo_total,
+            inicio_ponta_min,
+            fim_ponta_min,
+        )
+
+        hora_inicio_txt = f"{inicio_ponta_min // 60:02d}:{inicio_ponta_min % 60:02d}"
+        hora_fim_txt = f"{fim_ponta_min // 60:02d}:{fim_ponta_min % 60:02d}"
+        st.subheader("💡 Indicadores de ponta e fora de ponta")
+        st.caption(
+            f"Ponta considerada nesta análise: **{hora_inicio_txt} às {hora_fim_txt}**. "
+            "Todo o restante do período é fora de ponta."
+        )
+
+        tabela_indicadores = pd.DataFrame(
+            [
+                {"Indicador": "Demanda média total (W)", "Valor": indicadores_ponta["demanda_media_total_w"]},
+                {"Indicador": "Demanda média na ponta (W)", "Valor": indicadores_ponta["demanda_media_ponta_w"]},
+                {"Indicador": "Demanda média fora de ponta (W)", "Valor": indicadores_ponta["demanda_media_fora_w"]},
+                {"Indicador": "Demanda máxima na ponta (W)", "Valor": indicadores_ponta["demanda_max_ponta_w"]},
+                {"Indicador": "Demanda máxima fora de ponta (W)", "Valor": indicadores_ponta["demanda_max_fora_w"]},
+                {"Indicador": "Energia total (kWh)", "Valor": indicadores_ponta["energia_total_kwh"]},
+                {"Indicador": "Energia na ponta (kWh)", "Valor": indicadores_ponta["energia_ponta_kwh"]},
+                {"Indicador": "Energia fora de ponta (kWh)", "Valor": indicadores_ponta["energia_fora_kwh"]},
+            ]
+        )
+        st.dataframe(tabela_indicadores, hide_index=True, width="stretch")
         
         # Estatísticas dos picos
         pico_medio = np.mean(picos)
         pico_max = np.max(picos)
         pico_min = np.min(picos)
         pico_95 = np.percentile(picos, 95)
+        resultados_estacao_atual = {
+            "picos": picos,
+            "perfis": perfis,
+            "consumos": consumos,
+            "detalhes_pico": resultados_estacoes[estacao_detalhe].get("detalhes_pico"),
+            "inicio_ponta_min": inicio_ponta_min,
+            "fim_ponta_min": fim_ponta_min,
+            "resumo_estacoes": resumo_estacoes,
+            "estacao_referencia": estacao_detalhe.capitalize(),
+        }
         
         # Botões para geração de relatórios
         col_relatorio1, col_relatorio2, col_relatorio3 = st.columns([2, 1, 1])
@@ -1779,7 +2128,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                     )
 
                     pdf_data = gerar_pdf_relatorio(
-                        resultados,
+                        resultados_estacao_atual,
                         instancias_por_comodo,
                         num_simulacoes,
                         tempo_total,
@@ -1808,7 +2157,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
                     )
 
                     zip_data = gerar_zip_relatorio_latex(
-                        resultados,
+                        resultados_estacao_atual,
                         instancias_por_comodo,
                         num_simulacoes,
                         tempo_total,
@@ -1841,7 +2190,7 @@ if "comodos" in st.session_state and st.session_state.comodos:
         with col4:
             st.metric("Percentil 95", f" {pico_95:.0f} W")
 
-        detalhes_pico = resultados.get("detalhes_pico")
+        detalhes_pico = resultados_estacoes[estacao_detalhe].get("detalhes_pico")
         if detalhes_pico:
             st.markdown("---")
             st.subheader("🔎 Exemplo concreto: equipamentos ligados no Pico Médio e no P95")
