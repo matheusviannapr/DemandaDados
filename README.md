@@ -14,7 +14,7 @@ Para persistência em nuvem (Neon), defina `DATABASE_URL` antes de iniciar:
 
 ```bash
 export DATABASE_URL='postgresql+psycopg://USER:SENHA@ep-xxxx.us-east-2.aws.neon.tech/neondb?sslmode=require'
-streamlit run app/main.py
+streamlit run monte_carlo_hotel_app_final_v3.py
 ```
 
 Sem `DATABASE_URL`, o fallback é SQLite local.
@@ -23,7 +23,7 @@ Sem `DATABASE_URL`, o fallback é SQLite local.
 
 ```bash
 pip install -r requirements.txt
-streamlit run app/main.py
+streamlit run monte_carlo_hotel_app_final_v3.py
 ```
 
 ## Seed opcional
@@ -38,3 +38,6 @@ python -m app.db.seed
 - `app/db`: conexão, schema e repositórios
 - `app/pages`: fluxo do usuário (upload até resultados)
 - `app/ui`: componentes reutilizáveis da interface
+
+
+> Entry point padrão para deploy atual: `monte_carlo_hotel_app_final_v3.py` (agora apontando para a arquitetura modular).
