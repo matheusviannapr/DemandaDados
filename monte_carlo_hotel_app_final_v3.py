@@ -16,6 +16,12 @@ import os
 import matplotlib.pyplot as plt
 import zipfile
 
+TEMPO_TOTAL_PADRAO_MIN = 1440
+PERCENTIL_DIMENSIONAMENTO = 95
+MARGEM_SEGURANCA_DIMENSIONAMENTO = 1.20
+IC_INFERIOR_PERCENTIL = 2.5
+IC_SUPERIOR_PERCENTIL = 97.5
+
 # Configuração da página
 st.set_page_config(
     page_title="D² - Demanda e Dados",
@@ -235,7 +241,7 @@ try:
             ###  **Simulação Monte Carlo para Análise de Carga Elétrica - Demanda e Dados**
     """, unsafe_allow_html=True)
     
-except:
+except (FileNotFoundError, OSError):
     st.markdown("""
     <div class="logo-banner">
         <div class="title-overlay" style="left: 50%; transform: translate(-50%, -50%); text-align: center;">
@@ -540,6 +546,7 @@ def _get_duration_bounds_h(row: pd.Series) -> Tuple[Optional[float], Optional[fl
 
 
 def cria_comodo_da_planilha(sheet_df: pd.DataFrame, comodo_nome: str) -> Comodo:
+    sheet_df = sheet_df.rename(columns={"Potencia": "Potência"})
     equipamentos = []
     for _, row in sheet_df.iterrows():
         nome = row["Equipamento"]
@@ -570,7 +577,7 @@ def cria_comodo_da_planilha(sheet_df: pd.DataFrame, comodo_nome: str) -> Comodo:
                 probabilisticado_no_intervalo = True
             else:
                 intervalos = parse_intervalo_fixo(intervalo_str)
-        elif tipo_intervalo == "dinâmico":
+        elif tipo_intervalo in ("dinâmico", "dinamico"):
             if duracao_min_h is not None:
                 inicio, fim = parse_janela_operacao(intervalo_str)
                 intervalos = criar_gerador_duracao_intervalar(
@@ -683,7 +690,7 @@ def simula_carga_total(
     comodos: List[Comodo],
     instancias_por_comodo: dict,
     num_simulacoes: int = 1000,
-    tempo_total: int = 1440,
+    tempo_total: int = TEMPO_TOTAL_PADRAO_MIN,
     coletar_detalhes_pico: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[List[dict]]]:
     picos = []
@@ -786,6 +793,57 @@ def calcular_indicadores_ponta_fora(
         "energia_total_kwh": energia_total,
         "energia_ponta_kwh": energia_ponta,
         "energia_fora_kwh": energia_fora,
+    }
+
+
+def calcular_estatisticas_resumo(resultados: dict, instancias_por_comodo: dict, comodos_originais):
+    picos = resultados["picos"]
+    perfis = resultados["perfis"]
+    consumos = resultados["consumos"]
+
+    pico_medio = float(np.mean(picos))
+    pico_max = float(np.max(picos))
+    pico_min = float(np.min(picos))
+    pico_95 = float(np.percentile(picos, PERCENTIL_DIMENSIONAMENTO))
+    desvio_padrao = float(np.std(picos))
+    coef_variacao = (desvio_padrao / pico_medio) * 100 if pico_medio > 0 else 0.0
+    consumo_medio = float(np.mean(consumos))
+
+    media_por_minuto = np.mean(perfis, axis=0)
+    fator_carga_medio = (np.mean(media_por_minuto) / np.max(media_por_minuto)) * 100 if np.max(media_por_minuto) > 0 else 0.0
+
+    ic_inferior = float(np.percentile(picos, IC_INFERIOR_PERCENTIL))
+    ic_superior = float(np.percentile(picos, IC_SUPERIOR_PERCENTIL))
+    capacidade_recomendada = pico_95 * MARGEM_SEGURANCA_DIMENSIONAMENTO
+
+    total_potencia_instalada = 0.0
+    if comodos_originais:
+        for comodo_obj in comodos_originais:
+            total_potencia_instalada += sum(
+                eq.potencia * eq.quantidade for eq in comodo_obj.equipamentos
+            ) * instancias_por_comodo.get(comodo_obj.nome, 1)
+    fator_diversidade = pico_medio / total_potencia_instalada if total_potencia_instalada > 0 else 0.0
+
+    if coef_variacao < 15:
+        interpretacao_diversidade = "baixa variabilidade, comportamento previsivel e estavel"
+    elif coef_variacao < 30:
+        interpretacao_diversidade = "variabilidade moderada, comportamento tipico para instalacoes hoteleiras"
+    else:
+        interpretacao_diversidade = "alta variabilidade, requer monitoramento e analise adicional"
+
+    if fator_carga_medio > 70:
+        interpretacao_fator_carga = "excelente utilizacao da infraestrutura instalada"
+    elif fator_carga_medio > 50:
+        interpretacao_fator_carga = "boa utilizacao da infraestrutura"
+    else:
+        interpretacao_fator_carga = "utilizacao baixa, com grande diferenca entre carga media e pico"
+
+    return {
+        "pico_medio": pico_medio, "pico_max": pico_max, "pico_min": pico_min, "pico_95": pico_95,
+        "desvio_padrao": desvio_padrao, "coef_variacao": coef_variacao, "consumo_medio": consumo_medio,
+        "fator_carga_medio": fator_carga_medio, "ic_inferior": ic_inferior, "ic_superior": ic_superior,
+        "capacidade_recomendada": capacidade_recomendada, "fator_diversidade": fator_diversidade,
+        "interpretacao_diversidade": interpretacao_diversidade, "interpretacao_fator_carga": interpretacao_fator_carga,
     }
 
 
@@ -961,15 +1019,21 @@ def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes,
     """Gera um arquivo ZIP com relatório LaTeX técnico completo e imagens dos gráficos."""
     picos = resultados["picos"]
     perfis = resultados["perfis"]
-    consumos = resultados["consumos"]
-
-    pico_medio = np.mean(picos)
-    pico_max = np.max(picos)
-    pico_min = np.min(picos)
-    pico_95 = np.percentile(picos, 95)
-    desvio_padrao = np.std(picos)
-    coef_variacao = (desvio_padrao / pico_medio) * 100 if pico_medio > 0 else 0
-    consumo_medio = np.mean(consumos)
+    stats = calcular_estatisticas_resumo(resultados, instancias_por_comodo, comodos_originais)
+    pico_medio = stats["pico_medio"]
+    pico_max = stats["pico_max"]
+    pico_min = stats["pico_min"]
+    pico_95 = stats["pico_95"]
+    desvio_padrao = stats["desvio_padrao"]
+    coef_variacao = stats["coef_variacao"]
+    consumo_medio = stats["consumo_medio"]
+    fator_carga_medio = stats["fator_carga_medio"]
+    ic_inferior = stats["ic_inferior"]
+    ic_superior = stats["ic_superior"]
+    capacidade_recomendada = stats["capacidade_recomendada"]
+    fator_diversidade = stats["fator_diversidade"]
+    interpretacao_diversidade = stats["interpretacao_diversidade"]
+    interpretacao_fator_carga = stats["interpretacao_fator_carga"]
     inicio_ponta_min = int(resultados.get("inicio_ponta_min", 18 * 60))
     fim_ponta_min = int(resultados.get("fim_ponta_min", 21 * 60))
     estacao_referencia = str(resultados.get("estacao_referencia", "N/A"))
@@ -983,33 +1047,6 @@ def gerar_zip_relatorio_latex(resultados, instancias_por_comodo, num_simulacoes,
     )
     hora_inicio_ponta_txt = f"{inicio_ponta_min // 60:02d}:{inicio_ponta_min % 60:02d}"
     hora_fim_ponta_txt = f"{fim_ponta_min // 60:02d}:{fim_ponta_min % 60:02d}"
-
-    media_por_minuto = np.mean(perfis, axis=0)
-    fator_carga_medio = (np.mean(media_por_minuto) / np.max(media_por_minuto)) * 100 if np.max(media_por_minuto) > 0 else 0
-    ic_inferior = np.percentile(picos, 2.5)
-    ic_superior = np.percentile(picos, 97.5)
-    capacidade_recomendada = pico_95 * 1.2
-
-    total_potencia_instalada_comodos = 0
-    if comodos_originais:
-        for comodo_obj in comodos_originais:
-            total_potencia_instalada_comodos += sum(eq.potencia * eq.quantidade for eq in comodo_obj.equipamentos) * instancias_por_comodo.get(comodo_obj.nome, 1)
-
-    fator_diversidade = pico_medio / total_potencia_instalada_comodos if total_potencia_instalada_comodos > 0 else 0
-
-    if coef_variacao < 15:
-        interpretacao_diversidade = "baixa variabilidade, comportamento previsível e estável"
-    elif coef_variacao < 30:
-        interpretacao_diversidade = "variabilidade moderada, comportamento típico para instalações hoteleiras"
-    else:
-        interpretacao_diversidade = "alta variabilidade, requer monitoramento e análise adicional"
-
-    if fator_carga_medio > 70:
-        interpretacao_fator_carga = "excelente utilização da infraestrutura instalada"
-    elif fator_carga_medio > 50:
-        interpretacao_fator_carga = "boa utilização da infraestrutura"
-    else:
-        interpretacao_fator_carga = "utilização baixa, com grande diferença entre carga média e pico"
 
     secoes_graficos = []
     for idx, imagem in enumerate(imagens_graficos, start=1):
@@ -1186,6 +1223,9 @@ Tipo de Cômodo & Equipamento & Instâncias ligadas & Carga total no pico (W) \\
 \begin{{document}}
 \maketitle
 
+\section*{{Resumo Executivo}}
+Pico medio: {pico_medio:.0f} W \quad | \quad P95: {pico_95:.0f} W \quad | \quad Capacidade recomendada: {capacidade_recomendada:.0f} W \quad | \quad Fator de diversidade: {fator_diversidade:.2f}
+
 \section*{{1. Metodologia e Fundamentos Teóricos}}
 A simulação Monte Carlo é uma técnica estatística que utiliza amostragem aleatória repetitiva para obter resultados numéricos de problemas complexos. No contexto deste estudo, a metodologia foi aplicada para modelar o comportamento estocástico da demanda elétrica em estabelecimentos hoteleiros, considerando a variabilidade natural do uso de equipamentos pelos hóspedes.
 
@@ -1276,7 +1316,7 @@ Os gráficos a seguir fornecem insights fundamentais sobre o comportamento da de
     \item Capacidade recomendada para transformadores: {capacidade_recomendada:.0f} W (P95 + 20\% de margem de segurança).
     \item Dimensionamento de condutores: considerar fatores de correção por temperatura e agrupamento conforme NBR 5410.
     \item Sistemas de proteção: ajustes baseados no P95 com coordenação seletiva para garantir continuidade do serviço.
-    \item Fator de demanda global de referência: {(pico_95 / (pico_medio * 1.2)):.4f}.
+    \item Fator de demanda global de referência: {(pico_95 / (pico_medio * MARGEM_SEGURANCA_DIMENSIONAMENTO)):.4f}.
 \end{{itemize}}
 
 \section*{{9. Conclusões e Considerações Finais}}
@@ -1341,6 +1381,17 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.set_text_color(0, 0, 0) # Reset text color
     pdf.ln(10)
 
+    stats = calcular_estatisticas_resumo(resultados, instancias_por_comodo, comodos_originais)
+    pdf.set_font("Times", "B", 14)
+    pdf.multi_cell(190, 10, "RESUMO EXECUTIVO", align="J")
+    pdf.set_font("Times", "", 12)
+    pdf.set_x(pdf.l_margin)
+    pdf.multi_cell(190, 7,
+        f"Pico medio: {stats['pico_medio']:.0f} W  |  P95: {stats['pico_95']:.0f} W  |  "
+        f"Capacidade recomendada: {stats['capacidade_recomendada']:.0f} W  |  "
+        f"Fator de diversidade: {stats['fator_diversidade']:.2f}", align="J")
+    pdf.ln(10)
+
     # 1. Metodologia e Fundamentos Teóricos
     pdf.set_font("Times", "B", 14)
     pdf.multi_cell(190, 10, "1. METODOLOGIA E FUNDAMENTOS TEÓRICOS", align="J")
@@ -1369,52 +1420,20 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.multi_cell(190, 7, f"Método de amostragem: Pseudo-aleatório com distribuições específicas por equipamento", align="J")
     pdf.ln(10)
 
-    # Calcula estatísticas adicionais
-    picos = resultados["picos"]
-    perfis = resultados["perfis"]
-    consumos = resultados["consumos"]
-    
-    pico_medio = np.mean(picos)
-    pico_max = np.max(picos)
-    pico_min = np.min(picos)
-    pico_95 = np.percentile(picos, 95)
-    desvio_padrao = np.std(picos)
-    coef_variacao = (desvio_padrao / pico_medio) * 100
-    consumo_medio = np.mean(consumos)
-    
-    # Calcula fator de carga médio
-    media_por_minuto = np.mean(perfis, axis=0)
-    fator_carga_medio = (np.mean(media_por_minuto) / np.max(media_por_minuto)) * 100
-    
-    # Intervalo de confiança 95%
-    ic_inferior = np.percentile(picos, 2.5)
-    ic_superior = np.percentile(picos, 97.5)
-    
-    # Capacidade recomendada (P95 + 20%)
-    capacidade_recomendada = pico_95 * 1.2
-    
-    # Fator de diversidade
-    total_potencia_instalada_comodos = 0
-    if comodos_originais:
-        for comodo_obj in comodos_originais:
-            total_potencia_instalada_comodos += sum(eq.potencia * eq.quantidade for eq in comodo_obj.equipamentos) * instancias_por_comodo.get(comodo_obj.nome, 1)
-
-    fator_diversidade = pico_medio / total_potencia_instalada_comodos if total_potencia_instalada_comodos > 0 else 0
-    
-    # Interpretações técnicas
-    if coef_variacao < 15:
-        interpretacao_diversidade = "baixa variabilidade, comportamento previsível e estável"
-    elif coef_variacao < 30:
-        interpretacao_diversidade = "variabilidade moderada, comportamento típico para instalações hoteleiras"
-    else:
-        interpretacao_diversidade = "alta variabilidade, requer monitoramento e análise adicional"
-    
-    if fator_carga_medio > 70:
-        interpretacao_fator_carga = "indica utilização eficiente da infraestrutura elétrica"
-    elif fator_carga_medio > 50:
-        interpretacao_fator_carga = "indica utilização moderada da infraestrutura elétrica"
-    else:
-        interpretacao_fator_carga = "indica potencial de otimização da infraestrutura elétrica"
+    pico_medio = stats["pico_medio"]
+    pico_max = stats["pico_max"]
+    pico_min = stats["pico_min"]
+    pico_95 = stats["pico_95"]
+    desvio_padrao = stats["desvio_padrao"]
+    coef_variacao = stats["coef_variacao"]
+    consumo_medio = stats["consumo_medio"]
+    fator_carga_medio = stats["fator_carga_medio"]
+    ic_inferior = stats["ic_inferior"]
+    ic_superior = stats["ic_superior"]
+    capacidade_recomendada = stats["capacidade_recomendada"]
+    fator_diversidade = stats["fator_diversidade"]
+    interpretacao_diversidade = stats["interpretacao_diversidade"]
+    interpretacao_fator_carga = stats["interpretacao_fator_carga"]
     
     # 2. Resultados Estatísticos e Análise de Demanda
     pdf.set_font("Times", "B", 14)
@@ -1599,7 +1618,7 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.set_x(pdf.l_margin)
     pdf.multi_cell(190, 7, "Sistemas de Proteção: Ajustes baseados no P95 com coordenação seletiva para garantir continuidade do serviço", align="J")
     pdf.set_x(pdf.l_margin)
-    pdf.multi_cell(190, 7, f"Fator de Demanda Global: {(pico_95 / (pico_medio * 1.2)):.2f} para aplicação em projetos similares", align="J")
+    pdf.multi_cell(190, 7, f"Fator de Demanda Global: {(pico_95 / (pico_medio * MARGEM_SEGURANCA_DIMENSIONAMENTO)):.2f} para aplicação em projetos similares", align="J")
     pdf.ln(10)
 
     # 7. Conclusões e Considerações Finais
@@ -1629,6 +1648,54 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
     pdf.output(buffer)
     buffer.seek(0)
     return buffer.read()
+
+
+def gerar_exemplo_hotel():
+    df = pd.DataFrame({
+        "Equipamento": ["Ar Condicionado", "Iluminacao", "TV"],
+        "Potencia": [2000, 100, 150],
+        "Quantidade": [1, 4, 1],
+        "Tipo de intervalo": ["dinamico", "fixo", "fixo"],
+        "intervalo": ["07:00 as 22:00", "18:00 as 23:00", "19:00 as 23:00"],
+        "probabilidade": [0.8, 1.0, 0.9],
+        "FD": [0.8, 1.0, 1.0],
+        "duracao_min": [1.0, np.nan, np.nan],
+        "duracao_max": [3.0, np.nan, np.nan],
+        "modo_fixo": [np.nan, "FIXO_100%", "FIXO_DURACAO_INTERVALAR"],
+    })
+    return {"Quarto Padrao": df}
+
+
+def gerar_exemplo_escritorio():
+    df = pd.DataFrame({
+        "Equipamento": ["Computador", "Ar Condicionado", "Iluminacao", "Impressora"],
+        "Potencia": [150, 1800, 40, 300],
+        "Quantidade": [4, 1, 8, 1],
+        "Tipo de intervalo": ["fixo", "dinamico", "fixo", "fixo"],
+        "intervalo": ["08:00 as 18:00", "08:00 as 19:00", "08:00 as 19:00", "08:00 as 18:00"],
+        "probabilidade": [0.9, 0.85, 1.0, 0.3],
+        "FD": [0.9, 0.7, 1.0, 0.5],
+        "duracao_min": [np.nan, 2.0, np.nan, np.nan],
+        "duracao_max": [np.nan, 6.0, np.nan, np.nan],
+        "modo_fixo": ["FIXO_100%", np.nan, "FIXO_100%", "FIXO_100%"],
+    })
+    return {"Sala Administrativa": df}
+
+
+def gerar_exemplo_residencia():
+    df = pd.DataFrame({
+        "Equipamento": ["Geladeira", "Ar Condicionado", "Chuveiro Eletrico", "TV", "Maquina de Lavar"],
+        "Potencia": [150, 1500, 5500, 120, 1200],
+        "Quantidade": [1, 1, 1, 1, 1],
+        "Tipo de intervalo": ["fixo", "dinamico", "dinamico", "fixo", "dinamico"],
+        "intervalo": ["00:00 as 23:59", "18:00 as 23:00", "06:00 as 22:00", "19:00 as 23:00", "08:00 as 20:00"],
+        "probabilidade": [1.0, 0.6, 0.95, 0.8, 0.4],
+        "FD": [1.0, 0.8, 1.0, 1.0, 0.9],
+        "duracao_min": [np.nan, 1.0, 0.166, np.nan, 1.0],
+        "duracao_max": [np.nan, 4.0, 0.25, np.nan, 1.5],
+        "modo_fixo": ["FIXO_100%", np.nan, np.nan, "FIXO_100%", np.nan],
+    })
+    return {"Residencia Unifamiliar": df}
 
 # --- Interface do Streamlit ---
 
@@ -1669,6 +1736,31 @@ if entrada_dados == "📁 Upload de arquivo Excel":
 
 else:  # Entrada direta de dados
     st.subheader("✏️ Entrada direta de dados")
+
+    st.markdown("**Ou comece a partir de um modelo de exemplo:**")
+    exemplo_selecionado = st.selectbox(
+        "Carregar exemplo:",
+        ["Nenhum", "Hotel (quarto padrao)", "Escritorio", "Residencia"],
+        key="exemplo_selecionado",
+    )
+    if exemplo_selecionado != "Nenhum" and st.button("Carregar exemplo selecionado"):
+        mapa_exemplos = {
+            "Hotel (quarto padrao)": gerar_exemplo_hotel,
+            "Escritorio": gerar_exemplo_escritorio,
+            "Residencia": gerar_exemplo_residencia,
+        }
+        st.session_state.comodos_data = mapa_exemplos[exemplo_selecionado]()
+        st.session_state.comodos = cria_comodos_do_dataframe(st.session_state.comodos_data)
+        st.session_state.data_source = "manual"
+        st.success(f"Exemplo '{exemplo_selecionado}' carregado. Role para baixo para ajustar ou simular.")
+
+    with open("exemplo_hotel.xlsx", "rb") as f:
+        st.download_button(
+            "Baixar planilha de exemplo (Excel)",
+            data=f.read(),
+            file_name="exemplo_hotel.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
     
     # Inicializa o estado se necessário
     if "comodos_data" not in st.session_state:
@@ -1721,7 +1813,8 @@ else:  # Entrada direta de dados
                         max_value=10000,
                         value=100,
                         step=10,
-                        key=f"pot_{i}_{j}"
+                        key=f"pot_{i}_{j}",
+                        help="Consumo nominal do equipamento, em watts, conforme etiqueta/manual do fabricante."
                     )
                 
                 with col2:
@@ -1731,13 +1824,15 @@ else:  # Entrada direta de dados
                         max_value=50,
                         value=1,
                         step=1,
-                        key=f"qtd_{i}_{j}"
+                        key=f"qtd_{i}_{j}",
+                        help="Numero de unidades identicas deste equipamento dentro de uma unica instancia do comodo."
                     )
                     
                     tipo_intervalo = st.selectbox(
                         "Tipo de intervalo:",
                         ["fixo", "dinâmico"],
-                        key=f"tipo_{i}_{j}"
+                        key=f"tipo_{i}_{j}",
+                        help="'Fixo': horario(s) deterministico(s). 'Dinamico': horario sorteado aleatoriamente dentro de uma janela, a cada simulacao."
                     )
                 
                 with col3:
@@ -1760,7 +1855,8 @@ else:  # Entrada direta de dados
                         max_value=1.0,
                         value=1.0,
                         step=0.1,
-                        key=f"prob_{i}_{j}"
+                        key=f"prob_{i}_{j}",
+                        help="Chance (0 a 1) de o equipamento estar realmente em uso quando seu intervalo ocorre. 1.0 = sempre ligado no intervalo."
                     )
                     
                     fd = st.slider(
@@ -1769,7 +1865,8 @@ else:  # Entrada direta de dados
                         max_value=1.0,
                         value=1.0,
                         step=0.1,
-                        key=f"fd_{i}_{j}"
+                        key=f"fd_{i}_{j}",
+                        help="Fracao da potencia nominal efetivamente consumida durante o uso (0.1 a 1.0). Ex.: 0.7 = opera a 70% da potencia de placa."
                     )
 
                     duracao_min = st.number_input(
@@ -1787,7 +1884,8 @@ else:  # Entrada direta de dados
                         max_value=24.0,
                         value=0.0,
                         step=0.5,
-                        key=f"dur_max_{i}_{j}"
+                        key=f"dur_max_{i}_{j}",
+                        help="Limite superior do sorteio de duracao de uso, em horas. Deve ser maior ou igual a duracao minima."
                     )
 
                     modo_fixo = "FIXO_100%"
@@ -1796,6 +1894,7 @@ else:  # Entrada direta de dados
                             "Modo fixo:",
                             ["FIXO_100%", "FIXO_DURACAO_INTERVALAR"],
                             key=f"modo_fixo_{i}_{j}",
+                            help="'FIXO_100%': liga durante todo o intervalo informado. 'FIXO_DURACAO_INTERVALAR': sorteia uma duracao entre duracao_min e duracao_max dentro da janela informada em 'intervalo'."
                         )
                 
                 row = {
@@ -2112,6 +2211,18 @@ if "comodos" in st.session_state and st.session_state.comodos:
         
         # Botões para geração de relatórios
         col_relatorio1, col_relatorio2, col_relatorio3 = st.columns([2, 1, 1])
+
+        with col_relatorio1:
+            df_export = pd.DataFrame({"pico_w": picos})
+            df_export["consumo_kwh"] = consumos
+            csv_buffer = io.StringIO()
+            df_export.to_csv(csv_buffer, index=False)
+            st.download_button(
+                "Baixar dados brutos (CSV)",
+                data=csv_buffer.getvalue(),
+                file_name=f"dados_simulacao_{estacao_detalhe}.csv",
+                mime="text/csv",
+            )
 
         with col_relatorio2:
             if st.button("📄 Gerar Relatório PDF", type="secondary"):
