@@ -43,10 +43,20 @@ st.markdown("""
         background-color: #2c3e50;
     }
     
-    .stMarkdown, .stText, .stSelectbox label, .stNumberInput label, 
+    .stMarkdown, .stText, .stSelectbox label, .stNumberInput label,
     .stSlider label, .stTextInput label, .stRadio label, .stFileUploader label,
-    .stExpander label, .stDataFrame, .stTable {
+    .stExpander label, .stDataFrame, .stTable,
+    h1, h2, h3, h4, h5, h6, p, span, label, li,
+    .stCaption, .stMarkdown p, .stMarkdown li, .stMarkdown blockquote,
+    .stSelectbox div, .stRadio div, .stCheckbox label span, .stTabs button p {
         color: white !important;
+    }
+
+    blockquote {
+        border-left: 4px solid #3498db;
+        background-color: rgba(52, 152, 219, 0.15);
+        padding: 10px 16px;
+        border-radius: 6px;
     }
     
     .stSelectbox > div > div {
@@ -204,6 +214,50 @@ st.markdown("""
         color: #2980b9;
         text-decoration: underline;
     }
+
+    .hero-box {
+        background: linear-gradient(135deg, #1c2833 0%, #2c3e50 60%, #34495e 100%);
+        border: 1px solid #5d6d7e;
+        border-radius: 14px;
+        padding: 28px 32px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    }
+
+    .hero-box h1 {
+        margin-top: 0;
+        font-size: 2rem;
+    }
+
+    .flow-chip {
+        display: inline-block;
+        background-color: #3498db;
+        color: white !important;
+        padding: 4px 12px;
+        border-radius: 999px;
+        margin: 2px 4px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .stRadio > div {
+        gap: 10px;
+    }
+
+    .stRadio [data-baseweb="radio"] {
+        background-color: #34495e;
+        border-radius: 8px;
+        padding: 10px 14px;
+        border: 1px solid #5d6d7e;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #3498db !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -221,7 +275,7 @@ with st.sidebar:
             Sistema desenvolvido para análise avançada de carga elétrica utilizando técnicas de simulação Monte Carlo com instâncias individualizadas.
         </p>
         <p style="font-size: 0.8rem; color: #95a5a6;">
-            © 2025 - Todos os direitos reservados
+            © 2026 - Todos os direitos reservados
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1789,19 +1843,26 @@ def gerar_pdf_relatorio(resultados, instancias_por_comodo, num_simulacoes, tempo
 # --- Interface do Streamlit ---
 
 # --- Apresentação inicial do programa ---
-st.title("⚡ Demanda e Dádio — Simulação de Demanda Elétrica")
 st.markdown(
     """
-Este programa estima, por **simulação estatística (Monte Carlo)**, a demanda
-elétrica de um estabelecimento (ex.: hotel, escritório) a partir dos
-equipamentos instalados e de como/quando eles costumam ser usados. O
-resultado ajuda a dimensionar disjuntores, transformadores e contratos de
-energia sem precisar medir a instalação real durante meses.
-
-**Como funciona, em resumo:**
-`Equipamentos e hábitos de uso` → `milhares de cenários simulados` →
-`estatísticas de pico e consumo` → `recomendação de capacidade`.
-"""
+    <div class="hero-box">
+        <h1>⚡ Demanda e Dados</h1>
+        <p style="font-size: 1.05rem; opacity: 0.95;">
+            Simulação estatística (Monte Carlo) da demanda elétrica de um
+            estabelecimento, a partir dos equipamentos instalados e de como/quando
+            eles costumam ser usados. Ajuda a dimensionar disjuntores,
+            transformadores e contratos de energia sem precisar medir a
+            instalação real durante meses.
+        </p>
+        <p>
+            <span class="flow-chip">1. Equipamentos e hábitos de uso</span>→
+            <span class="flow-chip">2. Milhares de cenários simulados</span>→
+            <span class="flow-chip">3. Estatísticas de pico e consumo</span>→
+            <span class="flow-chip">4. Recomendação de capacidade</span>
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 with st.expander("📖 Glossário de termos técnicos"):
@@ -1845,12 +1906,23 @@ if modo_inicio == "🏨 Ver exemplo já pronto":
     tipo_exemplo = st.selectbox(
         "Escolha o tipo de cenário de exemplo:",
         ["Hotel", "Escritório pequeno"],
-        help="Ambos os cenários usam dados fictícios apenas para fins de demonstração.",
+        help="Ambos os cenários usam dados fictícios apenas para fins de demonstração. Você pode editar os valores depois de carregar.",
     )
     tipo_exemplo_key = "hotel" if tipo_exemplo == "Hotel" else "escritorio"
 
-    if st.button("▶️ Carregar exemplo e simular agora", type="primary"):
-        st.session_state.comodos = cria_comodos_do_dataframe(criar_cenario_exemplo(tipo_exemplo_key))
+    col_ex1, col_ex2 = st.columns(2)
+    with col_ex1:
+        carregar_exemplo = st.button("▶️ Carregar exemplo e simular agora", type="primary", width="stretch")
+    with col_ex2:
+        if st.session_state.get("modo_exemplo_ativo"):
+            if st.button("🔄 Recomeçar com novo exemplo", width="stretch"):
+                for chave in ("comodos", "comodos_data", "resultados", "modo_exemplo_ativo", "ajustes_sazonais", "instancias_por_comodo"):
+                    st.session_state.pop(chave, None)
+                st.rerun()
+
+    if carregar_exemplo:
+        st.session_state.comodos_data = criar_cenario_exemplo(tipo_exemplo_key)
+        st.session_state.comodos = cria_comodos_do_dataframe(st.session_state.comodos_data)
         st.session_state.data_source = "exemplo"
         st.session_state.modo_exemplo_ativo = True
         st.session_state.pop("resultados", None)
@@ -1858,12 +1930,34 @@ if modo_inicio == "🏨 Ver exemplo já pronto":
     if st.session_state.get("modo_exemplo_ativo"):
         st.info(
             "ℹ️ Você está vendo um **EXEMPLO ilustrativo** com dados fictícios. "
-            "Troque para 'Configurar meus próprios dados' para usar seus números reais."
+            "Edite os valores abaixo para experimentar, ou troque para 'Configurar meus próprios dados' para usar seus números reais."
         )
-        if st.button("🔄 Recomeçar com novo exemplo"):
-            for chave in ("comodos", "resultados", "modo_exemplo_ativo", "ajustes_sazonais", "instancias_por_comodo"):
-                st.session_state.pop(chave, None)
-            st.rerun()
+
+        with st.expander("✏️ Editar dados do exemplo", expanded=False):
+            st.caption(
+                "Altere potência, quantidade, probabilidade, FD, intervalo de horário etc. "
+                "e clique em 'Aplicar alterações e simular' para recalcular."
+            )
+            comodos_data_editados = {}
+            for comodo_nome, df_comodo in st.session_state.comodos_data.items():
+                st.markdown(f"**{comodo_nome}**")
+                comodos_data_editados[comodo_nome] = st.data_editor(
+                    df_comodo,
+                    key=f"editor_exemplo_{comodo_nome}",
+                    width="stretch",
+                    num_rows="dynamic",
+                )
+
+            if st.button("✅ Aplicar alterações e simular", type="primary"):
+                try:
+                    st.session_state.comodos_data = comodos_data_editados
+                    st.session_state.comodos = cria_comodos_do_dataframe(comodos_data_editados)
+                    st.session_state.pop("resultados", None)
+                    st.success("✅ Dados do exemplo atualizados com sucesso!")
+                except ValueError as e:
+                    st.error(f"Dados inválidos: {e}")
+                except Exception as e:
+                    st.error(f"Erro inesperado ao aplicar alterações: {e}")
 
 entrada_dados = None
 if modo_inicio == "📁 Configurar meus próprios dados":
